@@ -1,5 +1,5 @@
 from extensions import app, query_api
-from apc_ai import handle_apc_question
+from services.apc_legacy_core import handle_apc_question
 from config import INFLUX_ORG
 from services.agent_router_bridge import handle_house_or_ai_question
 

@@ -1,6 +1,6 @@
 import os
 
-from buderus_module import BuderusService
+from services.buderus_legacy_core import BuderusService
 from extensions import app
 
 

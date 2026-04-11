@@ -2,7 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from extensions import app
-from buderus_module import load_buderus_module
+from services.buderus_legacy_core import load_buderus_module
 
 from services.loxone_ws_service import start_loxone_ws_background
 

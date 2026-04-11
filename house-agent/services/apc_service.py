@@ -1,6 +1,6 @@
 from config import INFLUX_ORG
 from extensions import query_api
-from apc_ai import (
+from services.apc_legacy_core import (
     APC_BUCKET_DEFAULT,
     APC_MEASUREMENTS_DEFAULT,
     handle_apc_question,
