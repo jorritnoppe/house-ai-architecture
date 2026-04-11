@@ -1,0 +1,10 @@
+{
+  "service_name": "house-ai",
+  "host": "0.0.0.0",
+  "port": 8000,
+  "features": {
+    "voice": true,
+    "telemetry": true,
+    "safe_actions": true
+  }
+}

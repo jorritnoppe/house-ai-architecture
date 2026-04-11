@@ -10,13 +10,13 @@ from flask import Blueprint, jsonify, request
 
 house_bp = Blueprint("house", __name__)
 
-ELECTRICPI_BASE_URL = os.getenv("ELECTRICPI_BASE_URL", "http://192.168.1.15:8877").rstrip("/")
+ELECTRICPI_BASE_URL = os.getenv("ELECTRICPI_BASE_URL", "http://audio-node.local:8877").rstrip("/")
 HOUSE_AGENT_SELF_BASE_URL = os.getenv("HOUSE_AGENT_SELF_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 CONVERSATION_STORE_FILE = Path(
     os.getenv(
         "HOUSE_CONVERSATION_STORE_FILE",
-        "/home/jnoppe/house-agent/data/conversation_last_speaker.json",
+        "/opt/house-ai/data/conversation_last_speaker.json",
     )
 )
 CONVERSATION_STORE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -93,7 +93,7 @@ def _speaker_or_404(speaker: str) -> str:
 
 
 
-def _electricpi_request(method: str, path: str, payload: dict | None = None) -> dict:
+def _audio-node-1_request(method: str, path: str, payload: dict | None = None) -> dict:
     url = f"{ELECTRICPI_BASE_URL}{path}"
 
     if method.upper() == "GET":
@@ -189,7 +189,7 @@ def _build_speaker_payload(speaker: str, payload: dict) -> dict:
 def house_status():
     return jsonify({
         "status": "ok",
-        "electricpi_base_url": ELECTRICPI_BASE_URL,
+        "audio-node-1_base_url": ELECTRICPI_BASE_URL,
         "speakers": {
             name: {
                 "defaults": cfg,
@@ -203,7 +203,7 @@ def house_status():
 def house_speaker_status(speaker: str):
     try:
         speaker = _speaker_or_404(speaker)
-        data = _electricpi_request("GET", f"/speaker/{speaker}/status")
+        data = _audio-node-1_request("GET", f"/speaker/{speaker}/status")
         return jsonify(data)
     except Exception as e:
         return jsonify({
@@ -219,7 +219,7 @@ def house_speaker_test(speaker: str):
         speaker = _speaker_or_404(speaker)
         defaults = SPEAKER_DEFAULTS[speaker]
 
-        electricpi_payload = {
+        audio-node-1_payload = {
             "owner": "ai",
             "text": defaults["test_text"],
             "duration_s": defaults["duration_s"],
@@ -229,7 +229,7 @@ def house_speaker_test(speaker: str):
             "start_delay_s": defaults["start_delay_s"],
         }
 
-        data = _electricpi_request("POST", f"/speaker/{speaker}/speak", electricpi_payload)
+        data = _audio-node-1_request("POST", f"/speaker/{speaker}/speak", audio-node-1_payload)
         return jsonify(data)
     except Exception as e:
         return jsonify({
@@ -246,9 +246,9 @@ def house_speak_named(speaker: str):
         payload = request.get_json(silent=True) or {}
         conversation_id = (payload.get("conversation_id") or "").strip()
 
-        electricpi_payload = _build_speaker_payload(speaker, payload)
+        audio-node-1_payload = _build_speaker_payload(speaker, payload)
 
-        if not electricpi_payload["text"]:
+        if not audio-node-1_payload["text"]:
             return jsonify({
                 "status": "error",
                 "message": "missing 'text'",
@@ -257,11 +257,11 @@ def house_speak_named(speaker: str):
         app.logger.warning(
             "HOUSE_SPEAK_DEBUG speaker=%s payload=%s base_url=%s",
             speaker,
-            electricpi_payload,
+            audio-node-1_payload,
             ELECTRICPI_BASE_URL,
         )
 
-        data = _electricpi_request("POST", f"/speaker/{speaker}/speak", electricpi_payload)
+        data = _audio-node-1_request("POST", f"/speaker/{speaker}/speak", audio-node-1_payload)
 
         if conversation_id:
             remember_last_speaker(conversation_id, speaker)
@@ -314,7 +314,7 @@ def house_speak_all():
             speaker_payload = _build_speaker_payload(speaker, payload)
             speaker_payload["text"] = text
 
-            data = _electricpi_request("POST", f"/speaker/{speaker}/speak", speaker_payload)
+            data = _audio-node-1_request("POST", f"/speaker/{speaker}/speak", speaker_payload)
 
             results.append({
                 "speaker": speaker,
@@ -372,10 +372,10 @@ def house_speak_last():
         }), 404
 
     try:
-        electricpi_payload = _build_speaker_payload(speaker, payload)
-        electricpi_payload["text"] = text
+        audio-node-1_payload = _build_speaker_payload(speaker, payload)
+        audio-node-1_payload["text"] = text
 
-        data = _electricpi_request("POST", f"/speaker/{speaker}/speak", electricpi_payload)
+        data = _audio-node-1_request("POST", f"/speaker/{speaker}/speak", audio-node-1_payload)
 
         remember_last_speaker(conversation_id, speaker)
 
@@ -404,17 +404,17 @@ def house_conversation_last_speaker(conversation_id: str):
 def house_diagnostics():
     diagnostics = {
         "status": "ok",
-        "electricpi_base_url": ELECTRICPI_BASE_URL,
+        "audio-node-1_base_url": ELECTRICPI_BASE_URL,
         "house_agent_self_base_url": HOUSE_AGENT_SELF_BASE_URL,
-        "electricpi_health": None,
+        "audio-node-1_health": None,
         "speakers": {},
         "conversation_last_speaker_map": _load_conversation_store(),
     }
 
     try:
-        diagnostics["electricpi_health"] = _electricpi_request("GET", "/health")
+        diagnostics["audio-node-1_health"] = _audio-node-1_request("GET", "/health")
     except Exception as e:
-        diagnostics["electricpi_health"] = {
+        diagnostics["audio-node-1_health"] = {
             "status": "error",
             "message": str(e),
         }
@@ -423,14 +423,14 @@ def house_diagnostics():
     for speaker, cfg in SPEAKER_DEFAULTS.items():
         speaker_entry = {
             "defaults": cfg,
-            "electricpi_status": None,
+            "audio-node-1_status": None,
             "player_status": None,
         }
 
         try:
-            speaker_entry["electricpi_status"] = _electricpi_request("GET", f"/speaker/{speaker}/status")
+            speaker_entry["audio-node-1_status"] = _audio-node-1_request("GET", f"/speaker/{speaker}/status")
         except Exception as e:
-            speaker_entry["electricpi_status"] = {
+            speaker_entry["audio-node-1_status"] = {
                 "status": "error",
                 "message": str(e),
             }
@@ -461,15 +461,15 @@ def house_diagnostics_text():
     lines.append("House AI Diagnostics")
     lines.append("====================")
     lines.append("")
-    lines.append(f"ElectricPi Base URL : {data.get('electricpi_base_url')}")
+    lines.append(f"audio-node-1 Base URL : {data.get('audio-node-1_base_url')}")
     lines.append(f"House Agent Base URL: {data.get('house_agent_self_base_url')}")
     lines.append(f"Overall Status      : {data.get('status')}")
     lines.append("")
 
-    electricpi_health = data.get("electricpi_health") or {}
-    lines.append("ElectricPi Health")
+    audio-node-1_health = data.get("audio-node-1_health") or {}
+    lines.append("audio-node-1 Health")
     lines.append("-----------------")
-    lines.append(json.dumps(electricpi_health, indent=2, ensure_ascii=False))
+    lines.append(json.dumps(audio-node-1_health, indent=2, ensure_ascii=False))
     lines.append("")
 
     lines.append("Speakers")
@@ -477,7 +477,7 @@ def house_diagnostics_text():
     for speaker, info in (data.get("speakers") or {}).items():
         lines.append(f"{speaker}")
         lines.append(f"  defaults      : {json.dumps(info.get('defaults', {}), ensure_ascii=False)}")
-        lines.append(f"  electricpi    : {json.dumps(info.get('electricpi_status', {}), ensure_ascii=False)}")
+        lines.append(f"  audio-node-1    : {json.dumps(info.get('audio-node-1_status', {}), ensure_ascii=False)}")
         lines.append(f"  player_status : {json.dumps(info.get('player_status', {}), ensure_ascii=False)}")
         lines.append("")
 
@@ -530,7 +530,7 @@ def house_speak_default():
 
     cfg = SPEAKER_DEFAULTS[speaker]
 
-    electricpi_payload = {
+    audio-node-1_payload = {
         "owner": payload.get("owner", "ai"),
         "text": text,
         "volume": payload.get("volume", cfg["volume"]),
@@ -541,7 +541,7 @@ def house_speak_default():
     }
 
     try:
-        data = _electricpi_request("POST", f"/speaker/{speaker}/speak", electricpi_payload)
+        data = _audio-node-1_request("POST", f"/speaker/{speaker}/speak", audio-node-1_payload)
 
         if conversation_id:
             remember_last_speaker(conversation_id, speaker)
@@ -570,7 +570,7 @@ def house_help():
     return jsonify({
         "status": "ok",
         "overview": {
-            "electricpi_base_url": ELECTRICPI_BASE_URL,
+            "audio-node-1_base_url": ELECTRICPI_BASE_URL,
             "description": "Safe house speaker control endpoints for AI speech output.",
             "mic_future_note": "Later, room mic nodes can pass origin_room and still use these speaker endpoints explicitly.",
         },
@@ -657,7 +657,7 @@ def house_help_text():
 
 Overview
 --------
-This server exposes safe AI speech endpoints through ElectricPi.
+This server exposes safe AI speech endpoints through audio-node-1.
 
 Speaker Types
 -------------
@@ -748,8 +748,8 @@ Conversation Memory
 
 Diagnostics
 -----------
-- ElectricPi health
-- per-speaker ElectricPi status
+- audio-node-1 health
+- per-speaker audio-node-1 status
 - per-speaker player alive status
 - default speaker config
 - conversation last-speaker map

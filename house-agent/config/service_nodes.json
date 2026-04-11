@@ -1,81 +1,18 @@
 {
-  "ai-server": {
-    "mode": "local_systemctl",
-    "services": [
-      "house-agent.service",
-      "ollama.service",
-      "netdata.service",
-      "meshcentral.service",
-      "house-agent-loxone-ws.service",
-      "house-audio-files.service",
-      "ups-voice-monitor.service"
-    ]
+  "house-ai-server": {
+    "url": "http://house-ai-server.local:5101/health/services",
+    "services": ["house-agent.service", "ollama.service", "open-webui.service"]
   },
-  "deskpi": {
-    "mode": "remote_http",
-    "url": "http://192.168.1.208:5101/health/services",
-    "services": [
-      "netdata.service",
-      "wake-listener.service",
-      "flask_relays.service",
-      "wayvnc.service",
-      "wayvnc-control.service"
-    ]
+  "voice-node-1": {
+    "url": "http://voice-node-1.local:5101/health/services",
+    "services": ["wake-listener.service", "voice-node.service"]
   },
-  "electricpi": {
-    "mode": "remote_http",
-    "url": "http://192.168.1.15:5101/health/services",
-    "services": [
-      "netdata.service",
-      "loxone-bridge.service",
-      "lyrionmusicserver.service",
-      "flaskmusic.service",
-      "relay.service",
-      "serialflask.service",
-      "flowlogger.service",
-      "eastron.service",
-      "picam-stream.service",
-      "mediamtx.service"
-    ]
+  "audio-node-1": {
+    "url": "http://audio-node-1.local:5101/health/services",
+    "services": ["audio-router.service", "automation-bridge.service"]
   },
-  "luifelpi": {
-    "mode": "remote_http",
-    "url": "http://192.168.9.177:5101/health/services",
-    "services": [
-      "netdata.service",
-      "flaskapp.service",
-      "meshagent.service",
-      "ssh.service"
-    ]
-  },
-  "discoverpi": {
-    "mode": "remote_http",
-    "url": "http://192.168.9.198:5101/health/services",
-    "services": [
-      "netdata.service",
-      "feedback-node.service",
-      "dnsmasq.service",
-      "wayvnc.service",
-      "wayvnc-control.service"
-    ]
-  },
-  "attackpi": {
-    "mode": "remote_http",
-    "url": "http://192.168.1.185:5101/health/services",
-    "services": [
-      "netdata.service",
-      "meshagent.service",
-      "ssh.service",
-      "apcmonitor.service",
-      "apcupsd.service",
-      "bitvavo-flask.service",
-      "buderuslogger.service",
-      "Eleprice.service",
-      "sma_logger.service",
-      "solar_logger.service",
-      "solarpulse.service",
-      "wayvnc.service",
-      "wayvnc-control.service"
-    ]
+  "feedback-node": {
+    "url": "http://feedback-node.local:5101/health/services",
+    "services": ["feedback-probe.service"]
   }
 }

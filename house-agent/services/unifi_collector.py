@@ -106,7 +106,7 @@ class UniFiCollector:
         self.asset_map_path = Path(
             os.getenv(
                 "UNIFI_ASSET_MAP_PATH",
-                "/home/jnoppe/house-agent/house-ai-knowledge/devices/unifi_asset_map.json"
+                "/opt/house-ai/house-ai-knowledge/devices/unifi_asset_map.json"
             )
         )
         self.asset_map = self._load_asset_map()
@@ -373,13 +373,13 @@ class UniFiCollector:
 
     def _infer_client_role(self, row: Dict[str, Any]) -> str:
         name = f"{row.get('name', '')} {row.get('hostname', '')}".lower()
-        if "deskpi" in name:
+        if "voice-node-1" in name:
             return "voice_node"
-        if "truenas" in name or "nas" in name:
+        if "nas-node" in name or "nas" in name:
             return "storage"
         if "printer" in name or "epson" in name or "hewlett packard" in name:
             return "printer"
-        if "ai-server" in name:
+        if "house-ai-server" in name:
             return "ai_server"
         return "client"
 
@@ -389,7 +389,7 @@ class UniFiCollector:
 
     def _is_critical_client(self, row: Dict[str, Any]) -> bool:
         name = f"{row.get('name', '')} {row.get('hostname', '')}".lower()
-        return any(token in name for token in ["deskpi", "ai-server", "truenas", "printer", "loxone"])
+        return any(token in name for token in ["voice-node-1", "house-ai-server", "nas-node", "printer", "loxone"])
 
     def get_cache(self) -> Dict[str, Any]:
         with self.lock:

@@ -23,7 +23,7 @@ Auto-generated from live route files.
 #### Calls seen
 - `Blueprint`
 - `ValueError`
-- `_speak_via_electricpi`
+- `_speak_via_audio-node-1`
 - `agent_bp.post`
 - `announce_text`
 - `app.logger.exception`
@@ -129,7 +129,7 @@ Auto-generated from live route files.
 - `SPEAKER_DEFAULTS.items`
 - `ValueError`
 - `_build_speaker_payload`
-- `_electricpi_request`
+- `_audio-node-1_request`
 - `_load_conversation_store`
 - `_local_request`
 - `_save_conversation_store`

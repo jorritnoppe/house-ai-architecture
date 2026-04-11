@@ -18,7 +18,7 @@ def _download_probe_file(probe_name: str) -> str:
     local_path = tmp_dir / probe_name
 
     resp = requests.get(
-        "http://192.168.9.198:8091/audio/get_file",
+        "http://feedback-node.local:8091/audio/get_file",
         params={"name": probe_name},
         timeout=60,
     )
@@ -75,7 +75,7 @@ def run_timing_test(
     probe_label: str = "timing_test",
 ) -> dict:
     pattern = save_test_pattern()
-    url = f"http://192.168.9.182:8000/voice/files/{pattern['filename']}"
+    url = f"http://house-ai.local:8000/voice/files/{pattern['filename']}"
 
     playback = play_url_on_player(
         player_id=target,

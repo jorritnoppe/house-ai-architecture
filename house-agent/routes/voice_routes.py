@@ -38,7 +38,7 @@ def voice_status():
         "available_players": ["desk", "living", "livingarea", "toilet", "bass"],
         "quiet_hours_start": 22,
         "quiet_hours_end": 7,
-        "log_file": "/home/jnoppe/house-agent/data/announcement_log.jsonl",
+        "log_file": "/opt/house-ai/data/announcement_log.jsonl",
         "ups_monitor_service": "ups-voice-monitor.service",
     })
 
@@ -48,7 +48,7 @@ def voice_status():
 
 @voice_bp.get("/voice/logs")
 def voice_logs():
-    log_file = Path("/home/jnoppe/house-agent/data/announcement_log.jsonl")
+    log_file = Path("/opt/house-ai/data/announcement_log.jsonl")
     limit = int(request.args.get("limit", 20))
 
     if not log_file.exists():

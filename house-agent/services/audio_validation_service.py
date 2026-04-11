@@ -6,7 +6,7 @@ from pathlib import Path
 
 from services.audio_timing_test_service import run_timing_test
 
-CACHE_DIR = Path("/home/jnoppe/house-agent/runtime")
+CACHE_DIR = Path("/opt/house-ai/runtime")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 LAST_TIMING_RESULT_FILE = CACHE_DIR / "last_timing_test.json"

@@ -55,7 +55,7 @@ POWER_FIELDS_DEFAULT = [
     "total_var",
 ]
 
-LOXONE_HOST = os.getenv("LOXONE_HOST", "192.168.1.88")
+LOXONE_HOST = os.getenv("LOXONE_HOST", "loxone.local")
 LOXONE_USER = os.getenv("LOXONE_USER", "aiuser")
 LOXONE_PASSWORD = os.getenv("LOXONE_PASSWORD", "")
 

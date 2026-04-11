@@ -10,9 +10,9 @@ This is used as a safe diagnostics layer for:
 - future autonomous diagnostics under explicit policy
 
 ## Nodes
-- AI server API: `192.168.9.182:8000`
-- AI server static generated audio server: `192.168.9.182:8010`
-- DiscoverPi feedback probe node: `192.168.9.198:8091`
+- House AI API: `house-ai.local:8000`
+- House AI static audio server: `house-ai.local:8010`
+- Feedback probe node: `feedback-node.local:8091`
 
 ## Why port 8010 exists
 Generated timing WAV files originally went through the main Flask/Gunicorn app on port `8000`.
@@ -60,12 +60,12 @@ This removed the self-blocking problem.
 ### On AI server
 Use:
 - `http://127.0.0.1:8000/...` for AI server routes
-- `http://192.168.9.198:8091/...` for DiscoverPi feedback-node calls
+- `http://feedback-node.local:8091/...` for DiscoverPi feedback-node calls
 
 ### On DiscoverPi
 Use:
 - `http://127.0.0.1:8091/...` for local feedback-node routes
-- `http://192.168.9.182:8000/...` for AI server routes
+- `http://house-ai.local:8000/...` for AI server routes
 
 ## Working route
 ### Full timing test

@@ -144,7 +144,7 @@ def handle_agent_question(question: str):
         "who is online",
         "who is on my network",
         "scan my lan",
-        "scan 192.168.",
+        "scan private subnet",
         "alive hosts",
     ]):
         if "AI_gen_network_scan" not in intents:

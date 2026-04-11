@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-PROMOTION_AUDIT_FILE = "/home/jnoppe/house-agent/data/proposed_promotion_audit.json"
+PROMOTION_AUDIT_FILE = "/opt/house-ai/data/proposed_promotion_audit.json"
 
 
 def _utc_now_iso() -> str:

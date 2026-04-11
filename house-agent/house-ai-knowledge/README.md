@@ -28,7 +28,6 @@ Future AI sessions and maintainers should start with:
 - topic folders: deeper supporting documentation
 - `generated/`: machine-generated maps
 - `agent/` and `policy/`: structured control and safety data
-- `_snapshots/`: archival reference only
 
 ## Maintenance Rule
 When the project changes:

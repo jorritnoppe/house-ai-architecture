@@ -25,7 +25,7 @@ from services.loxone_action_service import audio_speaker_route
 
 ANNOUNCEMENT_PIPER_MODEL = os.getenv(
     "ANNOUNCEMENT_PIPER_MODEL",
-    "/home/jnoppe/piper/en_US-lessac-medium.onnx",
+    "/opt/house-ai/models/piper/en_US-lessac-medium.onnx",
 )
 DEFAULT_ANNOUNCEMENT_PLAYER = os.getenv("DEFAULT_ANNOUNCEMENT_PLAYER", "desk")
 

@@ -116,9 +116,9 @@ def preflight_promotion_check(
     code = proposal.get("code") or ""
 
     base_dir = (
-        "/home/jnoppe/house-agent/experimental_tools"
+        "/opt/house-ai/experimental_tools"
         if target == "experimental"
-        else "/home/jnoppe/house-agent/tools"
+        else "/opt/house-ai/tools"
     )
 
     path_ok, path_or_msg = _safe_target_path(base_dir, filename)

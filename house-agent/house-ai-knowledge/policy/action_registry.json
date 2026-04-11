@@ -8,7 +8,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_bathroom_power_switch",
-          "host": "192.168.9.43",
+          "host": "audio-bathroom-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,
@@ -41,7 +41,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_livingroom_power_switch",
-          "host": "192.168.3.172",
+          "host": "audio-living-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,
@@ -84,7 +84,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_toiletroom_power_switch",
-          "host": "192.168.3.105",
+          "host": "audio-toilet-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,
@@ -110,7 +110,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_toiletroom_power_switch",
-          "host": "192.168.3.105",
+          "host": "audio-toilet-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,
@@ -153,7 +153,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_livingroom_power_switch",
-          "host": "192.168.3.172",
+          "host": "audio-living-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,
@@ -164,7 +164,7 @@
         {
           "action": "ensure_host_online",
           "control_name": "picore_bassroom_power_switch",
-          "host": "192.168.3.243",
+          "host": "audio-bass-node.local",
           "verify": {
             "method": "ping",
             "timeout_seconds": 2,

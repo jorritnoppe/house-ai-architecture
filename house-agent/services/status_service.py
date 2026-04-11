@@ -210,21 +210,21 @@ def build_status_report():
 
     # --- NETWORK DEVICES ---
     devices = [
-        ("deskpi", "192.168.9.50", 22),
-        ("electricpi", "192.168.9.15", 22),
-        ("luifel_pi", "192.168.9.177", 22),
-        ("attack_pi", "192.168.1.185", 22),
+        ("voice-node-1", "voice-node-1.local", 22),
+        ("audio-node-1", "audio-node-1.local", 22),
+        ("aux-node-1", "aux-node-1.local", 22),
+        ("utility-node-1", "utility-node-1.local", 22),
 
-        ("audio_pi_bass", "192.168.3.243", 22),
-        ("audio_pi_living", "192.168.3.172", 22),
-        ("audio_pi_toilet", "192.168.3.105", 22),
-        ("audio_pi_bathroom", "192.168.9.43", 22),
+        ("audio-bass-node", "audio-bass-node.local", 22),
+        ("audio-living-node", "audio-living-node.local", 22),
+        ("audio-toilet-node", "audio-toilet-node.local", 22),
+        ("audio-bathroom-node", "audio-bathroom-node.local", 22),
 
-        ("epson_printer", "192.168.9.227", 80),
-        ("desktop", "192.168.1.54", 22),
-        ("truenas", "192.168.3.166", 80),
+        ("printer", "printer.local", 80),
+        ("desktop", "desktop.local", 22),
+        ("nas-node", "nas-node.local", 80),
 
-        ("sma_inverter", "192.168.9.24", 502),
+        ("sma-inverter", "sma-inverter.local", 502),
     ]
 
     for name, ip, port in devices:

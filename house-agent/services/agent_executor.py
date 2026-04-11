@@ -3,7 +3,7 @@ from pathlib import Path
 
 from services.internal_route_executor import execute_internal_route
 
-ROOT = Path("/home/jnoppe/house-agent/house-ai-knowledge/policy")
+ROOT = Path("/opt/house-ai/house-ai-knowledge/policy")
 
 
 def _read_json(path: Path):

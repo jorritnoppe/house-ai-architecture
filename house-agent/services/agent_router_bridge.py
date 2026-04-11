@@ -162,12 +162,12 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         }
 
     node_aliases = {
-        "ai-server": ["ai-server", "aiserver", "server", "ai server"],
-        "deskpi": ["deskpi", "desk pi", "deskroom pi", "desk room pi"],
-        "electricpi": ["electricpi", "electric pi", "music pi", "audio pi"],
-        "luifelpi": ["luifelpi", "luifel pi"],
-        "discoverpi": ["discoverpi", "discover pi"],
-        "attackpi": ["attackpi", "attack pi", "atticpi", "attic pi", "atticroom pi", "attack pi atticroom"],
+        "house-ai-server": ["house-ai-server", "aiserver", "server", "ai server"],
+        "voice-node-1": ["voice-node-1", "desk pi", "deskroom pi", "desk room pi"],
+        "audio-node-1": ["audio-node-1", "electric pi", "music pi", "audio pi"],
+        "aux-node-1": ["aux-node-1", "luifel pi"],
+        "feedback-node": ["feedback-node", "discover pi"],
+        "utility-node-1": ["utility-node-1", "attack pi", "atticpi", "attic pi", "atticroom pi", "attack pi atticroom"],
     }
 
     matched_node = None
@@ -254,7 +254,7 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     if (
         ("service" in q or "services" in q or "ollama" in q or "house-agent" in q)
         and any(x in q for x in ["health", "status", "running", "alive", "up"])
-        and any(x in q for x in ["local", "this server", "ai-server", "on server"])
+        and any(x in q for x in ["local", "this server", "house-ai-server", "on server"])
         and matched_node is None
         and matched_service is None
     ):

@@ -184,7 +184,7 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
         }
 
     if path == "/ai/service/summary":
-        node = (params or {}).get("node", "ai-server")
+        node = (params or {}).get("node", "house-ai-server")
         return {
             "status": "ok",
             "data": get_service_health_for_node(node)

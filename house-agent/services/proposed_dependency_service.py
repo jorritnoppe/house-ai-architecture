@@ -57,7 +57,7 @@ def _extract_imports_from_code(code: str) -> list[str]:
 
 
 def _local_project_modules() -> set[str]:
-    project_root = "/home/jnoppe/house-agent"
+    project_root = "/opt/house-ai"
     names = set()
 
     for entry in os.listdir(project_root):

@@ -3,7 +3,7 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_ROOT = Path("/home/jnoppe/house-agent")
+PROJECT_ROOT = Path("/opt/house-ai")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 

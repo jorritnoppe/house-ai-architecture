@@ -14,9 +14,9 @@ from piper.config import SynthesisConfig
 VOICE_DIR = Path("/tmp/house-agent-voice")
 VOICE_DIR.mkdir(parents=True, exist_ok=True)
 
-LMS_HOST = os.getenv("LMS_HOST", "192.168.1.15")
+LMS_HOST = os.getenv("LMS_HOST", "audio-node.local")
 LMS_PORT = int(os.getenv("LMS_PORT", "9000"))
-PUBLIC_BASE_URL = os.getenv("VOICE_PUBLIC_BASE_URL", "http://192.168.9.182:8000")
+PUBLIC_BASE_URL = os.getenv("VOICE_PUBLIC_BASE_URL", "http://house-ai.local:8000")
 
 DEFAULT_PLAYER_ID = os.getenv("VOICE_DEFAULT_PLAYER_ID", "b8:27:eb:55:b2:8d")
 DEFAULT_VOLUME = float(os.getenv("VOICE_DEFAULT_VOLUME", "45"))
@@ -38,7 +38,7 @@ PLAYER_ALIASES = {
 }
 
 
-PIPER_MODEL = os.getenv("PIPER_MODEL", "/home/jnoppe/piper/en_US-lessac-medium.onnx")
+PIPER_MODEL = os.getenv("PIPER_MODEL", "/opt/house-ai/models/piper/en_US-lessac-medium.onnx")
 PIPER_USE_CUDA = os.getenv("PIPER_USE_CUDA", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 PIPER_LENGTH_SCALE = os.getenv("PIPER_LENGTH_SCALE", "").strip()

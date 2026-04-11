@@ -1,8 +1,8 @@
 {
-  "ai-server": "http://127.0.0.1:19999",
-  "deskpi": "http://192.168.1.208:19999",
-  "electricpi": "http://192.168.1.15:19999",
-  "luifelpi": "http://192.168.9.177:19999",
-  "discoverpi": "http://192.168.9.198:19999",
-  "attackpi": "http://192.168.1.185:19999"
+  "house-ai-server": "http://house-ai-server.local:19999",
+  "voice-node-1": "http://voice-node-1.local:19999",
+  "audio-node-1": "http://audio-node-1.local:19999",
+  "aux-node-1": "http://aux-node-1.local:19999",
+  "feedback-node": "http://feedback-node.local:19999",
+  "utility-node-1": "http://utility-node-1.local:19999"
 }
