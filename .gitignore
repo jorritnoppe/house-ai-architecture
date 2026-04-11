@@ -17,15 +17,15 @@ private/
 .DS_Store
 *.tar.gz
 *.ctl
-
-# project runtime / generated / backups
-*/data/voice_uploads/
-*/data/voice_files/
-*/backups/
+*.backup.json
+*.bak*
 *.save
 *.save.*
-*.bak
 *.known-good
 *.working
 *.before_*
 *.broken_*
+
+*/data/voice_uploads/
+*/data/voice_files/
+*/backups/
