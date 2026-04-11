@@ -1,0 +1,211 @@
+{
+  "actions": {
+    "music_bathroom_start": {
+      "category": "cat1",
+      "description": "Verify bathroom PiCore is online, power it on if needed, then start bathroom playback scene.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_bathroom_power_switch",
+          "host": "192.168.9.43",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 60
+        },
+        {
+          "action": "press",
+          "control_name": "bathroom_audio_start_scene_button"
+        }
+      ]
+    },
+    "music_bathroom_stop": {
+      "category": "cat1",
+      "description": "Stop bathroom playback scene.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "press",
+          "control_name": "bathroom_audio_stop_scene_button"
+        }
+      ]
+    },
+    "music_living_start": {
+      "category": "cat1",
+      "description": "Verify living room PiCore is online, enable route, then start living room playback scene.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_livingroom_power_switch",
+          "host": "192.168.3.172",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 30
+        },
+        {
+          "action": "ensure_on",
+          "control_name": "picore_livingroom_route_switch"
+        },
+        {
+          "action": "press",
+          "control_name": "livingroom_audio_start_scene_button"
+        }
+      ]
+    },
+    "music_living_stop": {
+      "category": "cat1",
+      "description": "Stop living room playback scene and release route.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "press",
+          "control_name": "livingroom_audio_stop_scene_button"
+        }
+      ],
+      "cleanup_steps": [
+        {
+          "action": "ensure_off",
+          "control_name": "picore_livingroom_route_switch"
+        }
+      ]
+    },
+    "music_wc_start": {
+      "category": "cat2",
+      "description": "Verify WC PiCore is online, enable route, then start WC playback scene.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_toiletroom_power_switch",
+          "host": "192.168.3.105",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 30
+        },
+        {
+          "action": "ensure_on",
+          "control_name": "picore_wcroom_route_switch"
+        },
+        {
+          "action": "press",
+          "control_name": "wcroom_audio_start_scene_button"
+        }
+      ]
+    },
+    "music_wc_night_start": {
+      "category": "cat2",
+      "description": "Verify WC PiCore is online, enable route, then start WC night playback scene.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_toiletroom_power_switch",
+          "host": "192.168.3.105",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 30
+        },
+        {
+          "action": "ensure_on",
+          "control_name": "picore_wcroom_route_switch"
+        },
+        {
+          "action": "press",
+          "control_name": "wcroom_audio_start_night_scene_button"
+        }
+      ]
+    },
+    "music_wc_stop": {
+      "category": "cat1",
+      "description": "Stop WC playback scene and release route.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "press",
+          "control_name": "wcroom_audio_stop_scene_button"
+        }
+      ],
+      "cleanup_steps": [
+        {
+          "action": "ensure_off",
+          "control_name": "picore_wcroom_route_switch"
+        }
+      ]
+    },
+    "music_party_start": {
+      "category": "cat3",
+      "description": "Verify living and bass players are online, enable living and bass routes, then start party scene.",
+      "confirmation_required": true,
+      "steps": [
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_livingroom_power_switch",
+          "host": "192.168.3.172",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 30
+        },
+        {
+          "action": "ensure_host_online",
+          "control_name": "picore_bassroom_power_switch",
+          "host": "192.168.3.243",
+          "verify": {
+            "method": "ping",
+            "timeout_seconds": 2,
+            "retries": 2
+          },
+          "power_on_wait_seconds": 12
+        },
+        {
+          "action": "ensure_on",
+          "control_name": "picore_livingroom_route_switch"
+        },
+        {
+          "action": "ensure_on",
+          "control_name": "picore_storageroom_route_switch"
+        },
+        {
+          "action": "press",
+          "control_name": "livingroom_audio_party_start_scene_button"
+        }
+      ]
+    },
+    "music_party_stop": {
+      "category": "cat1",
+      "description": "Stop party scene and release routes.",
+      "confirmation_required": false,
+      "steps": [
+        {
+          "action": "press",
+          "control_name": "livingroom_audio_party_stop_scene_button"
+        }
+      ],
+      "cleanup_steps": [
+        {
+          "action": "ensure_off",
+          "control_name": "picore_livingroom_route_switch"
+        },
+        {
+          "action": "ensure_off",
+          "control_name": "picore_storageroom_route_switch"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,444 @@
+import os
+import re
+import time
+import uuid
+import wave
+from pathlib import Path
+import subprocess
+
+import requests
+from piper import PiperVoice
+from piper.config import SynthesisConfig
+
+
+VOICE_DIR = Path("/tmp/house-agent-voice")
+VOICE_DIR.mkdir(parents=True, exist_ok=True)
+
+LMS_HOST = os.getenv("LMS_HOST", "192.168.1.15")
+LMS_PORT = int(os.getenv("LMS_PORT", "9000"))
+PUBLIC_BASE_URL = os.getenv("VOICE_PUBLIC_BASE_URL", "http://192.168.9.182:8000")
+
+DEFAULT_PLAYER_ID = os.getenv("VOICE_DEFAULT_PLAYER_ID", "b8:27:eb:55:b2:8d")
+DEFAULT_VOLUME = float(os.getenv("VOICE_DEFAULT_VOLUME", "45"))
+
+
+PLAYER_ALIASES = {
+    "desk": "b8:27:eb:55:b2:8d",
+
+    "living": "d8:3a:dd:3e:08:37",
+    "livingarea": "d8:3a:dd:3e:08:37",
+
+    "toilet": "d8:3a:dd:af:ea:3e",
+    "wc": "d8:3a:dd:af:ea:3e",
+
+    "bathroom": "b8:27:eb:58:aa:97",
+    "bath": "b8:27:eb:58:aa:97",
+
+    "bass": "d8:3a:dd:0c:92:2d",
+}
+
+
+PIPER_MODEL = os.getenv("PIPER_MODEL", "/home/jnoppe/piper/en_US-lessac-medium.onnx")
+PIPER_USE_CUDA = os.getenv("PIPER_USE_CUDA", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+PIPER_LENGTH_SCALE = os.getenv("PIPER_LENGTH_SCALE", "").strip()
+PIPER_NOISE_SCALE = os.getenv("PIPER_NOISE_SCALE", "").strip()
+PIPER_NOISE_W_SCALE = os.getenv("PIPER_NOISE_W_SCALE", "").strip()
+PIPER_SENTENCE_SILENCE = os.getenv("PIPER_SENTENCE_SILENCE", "").strip()
+PIPER_VOLUME = os.getenv("PIPER_VOLUME", "").strip()
+PIPER_SPEAKER = os.getenv("PIPER_SPEAKER", "").strip()
+
+VOICE = None
+
+
+def chunk_text(text: str, max_chars: int = 350) -> list[str]:
+    text = " ".join(str(text).split())
+    if len(text) <= max_chars:
+        return [text]
+
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    chunks = []
+    current = ""
+
+    for part in parts:
+        if not part:
+            continue
+
+        if len(current) + len(part) + 1 <= max_chars:
+            current = f"{current} {part}".strip()
+        else:
+            if current:
+                chunks.append(current)
+            current = part
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+
+def stop_player(player_id: str = "") -> dict:
+    resolved_player_id = resolve_player_id(player_id)
+    data = lms_request(resolved_player_id, ["stop"])
+    return {
+        "ok": True,
+        "player_id": resolved_player_id,
+        "lms_response": data,
+    }
+
+
+def mute_player(player_id: str = "") -> dict:
+    resolved_player_id = resolve_player_id(player_id)
+    data = lms_request(resolved_player_id, ["mixer", "volume", "0"])
+    return {
+        "ok": True,
+        "player_id": resolved_player_id,
+        "volume": 0,
+        "lms_response": data,
+    }
+
+
+
+def normalize_wav_ffmpeg(src_path: str, dst_path: str) -> str:
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        src_path,
+        "-ac", "1",
+        "-ar", "22050",
+        "-sample_fmt", "s16",
+        dst_path,
+    ]
+    subprocess.run(
+        cmd,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return dst_path
+
+
+def ensure_standard_wav(wav_path: str) -> str:
+    try:
+        with wave.open(wav_path, "rb") as wf:
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+
+        if channels == 1 and sampwidth == 2 and framerate == 22050:
+            return wav_path
+    except Exception:
+        pass
+
+    fixed_path = str(Path(wav_path).with_name(Path(wav_path).stem + "_fixed.wav"))
+    return normalize_wav_ffmpeg(wav_path, fixed_path)
+
+
+def concat_wav_files(wav_paths: list[str], output_path: str) -> str:
+    if not wav_paths:
+        raise ValueError("No WAV files to concatenate")
+
+    normalized_paths = []
+    temp_fixed_paths = []
+
+    for wav_path in wav_paths:
+        normalized = ensure_standard_wav(wav_path)
+        normalized_paths.append(normalized)
+        if normalized != wav_path:
+            temp_fixed_paths.append(normalized)
+
+    try:
+        with wave.open(normalized_paths[0], "rb") as first:
+            nchannels = first.getnchannels()
+            sampwidth = first.getsampwidth()
+            framerate = first.getframerate()
+            comptype = first.getcomptype()
+            compname = first.getcompname()
+
+        with wave.open(output_path, "wb") as out:
+            out.setnchannels(nchannels)
+            out.setsampwidth(sampwidth)
+            out.setframerate(framerate)
+            out.setcomptype(comptype, compname)
+
+            ref_format = (nchannels, sampwidth, framerate, comptype)
+
+            for wav_path in normalized_paths:
+                with wave.open(wav_path, "rb") as wf:
+                    current_format = (
+                        wf.getnchannels(),
+                        wf.getsampwidth(),
+                        wf.getframerate(),
+                        wf.getcomptype(),
+                    )
+                    if current_format != ref_format:
+                        raise ValueError(f"WAV format mismatch after normalization for {wav_path}")
+                    out.writeframes(wf.readframes(wf.getnframes()))
+
+        return output_path
+
+    finally:
+        for temp_path in temp_fixed_paths:
+            try:
+                Path(temp_path).unlink()
+            except Exception:
+                pass
+
+
+def sanitize_text(text: str) -> str:
+    return " ".join(str(text).split())
+
+
+def resolve_player_id(player_id: str = "") -> str:
+    key = (player_id or "").strip().lower()
+    if not key:
+        return DEFAULT_PLAYER_ID
+    return PLAYER_ALIASES.get(key, player_id)
+
+def normalize_wav_ffmpeg(src_path: str, dst_path: str) -> str:
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        src_path,
+        "-ac", "1",
+        "-ar", "22050",
+        "-sample_fmt", "s16",
+        dst_path,
+    ]
+    subprocess.run(
+        cmd,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return dst_path
+
+
+def ensure_standard_wav(wav_path: str) -> str:
+    try:
+        with wave.open(wav_path, "rb") as wf:
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+
+        if channels == 1 and sampwidth == 2 and framerate == 22050:
+            return wav_path
+    except Exception:
+        pass
+
+    fixed_path = str(Path(wav_path).with_name(Path(wav_path).stem + "_fixed.wav"))
+    return normalize_wav_ffmpeg(wav_path, fixed_path)
+
+
+def resolve_volume(volume=None) -> float:
+    if volume is None or volume == "":
+        return DEFAULT_VOLUME
+    value = float(volume)
+    if value < 0:
+        value = 0
+    if value > 100:
+        value = 100
+    return value
+
+
+def _build_syn_config():
+    kwargs = {}
+
+    if PIPER_VOLUME:
+        kwargs["volume"] = float(PIPER_VOLUME)
+    if PIPER_LENGTH_SCALE:
+        kwargs["length_scale"] = float(PIPER_LENGTH_SCALE)
+    if PIPER_NOISE_SCALE:
+        kwargs["noise_scale"] = float(PIPER_NOISE_SCALE)
+    if PIPER_NOISE_W_SCALE:
+        kwargs["noise_w_scale"] = float(PIPER_NOISE_W_SCALE)
+
+    if kwargs:
+        return SynthesisConfig(**kwargs)
+
+    return None
+
+
+def _get_voice() -> PiperVoice:
+    global VOICE
+
+    if VOICE is None:
+        model_path = Path(PIPER_MODEL)
+        if not model_path.exists():
+            raise FileNotFoundError(f"Piper model not found: {PIPER_MODEL}")
+
+        VOICE = PiperVoice.load(
+            str(model_path),
+            use_cuda=PIPER_USE_CUDA,
+        )
+
+    return VOICE
+
+
+def synthesize_wav(text: str) -> dict:
+    text = sanitize_text(text)
+    if not text:
+        raise ValueError("Text is empty")
+
+    voice = _get_voice()
+    syn_config = _build_syn_config()
+
+    filename = f"{uuid.uuid4().hex}.wav"
+    filepath = VOICE_DIR / filename
+
+    kwargs = {}
+    if syn_config is not None:
+        kwargs["syn_config"] = syn_config
+    if PIPER_SPEAKER:
+        kwargs["speaker_id"] = int(PIPER_SPEAKER)
+
+    chunks = chunk_text(text, max_chars=350)
+
+    if len(chunks) == 1:
+        with wave.open(str(filepath), "wb") as wav_file:
+            voice.synthesize_wav(chunks[0], wav_file, **kwargs)
+    else:
+        part_files = []
+
+        for i, chunk in enumerate(chunks):
+            part_path = VOICE_DIR / f"{filepath.stem}_part{i}.wav"
+            with wave.open(str(part_path), "wb") as wav_file:
+                voice.synthesize_wav(chunk, wav_file, **kwargs)
+            part_files.append(str(part_path))
+
+        concat_wav_files(part_files, str(filepath))
+
+        for part_file in part_files:
+            try:
+                Path(part_file).unlink()
+            except Exception:
+                pass
+
+    if not filepath.exists():
+        raise RuntimeError(f"Piper did not create output file: {filepath}")
+
+    return {
+        "filename": filename,
+        "filepath": str(filepath),
+        "url": f"{PUBLIC_BASE_URL}/voice/files/{filename}",
+        "text": text,
+    }
+
+
+def lms_request(player_id, command_parts):
+    payload = {
+        "id": 1,
+        "method": "slim.request",
+        "params": [player_id, command_parts],
+    }
+
+    response = requests.post(
+        f"http://{LMS_HOST}:{LMS_PORT}/jsonrpc.js",
+        json=payload,
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_players():
+    data = lms_request(0, ["players", "0", "50"])
+    return (data.get("result", {}) or {}).get("players_loop", []) or []
+
+
+
+
+def mute_player(player_id: str = "") -> dict:
+    resolved_player_id = resolve_player_id(player_id)
+    data = lms_request(resolved_player_id, ["mixer", "volume", "0"])
+    return {
+        "ok": True,
+        "player_id": resolved_player_id,
+        "volume": 0,
+        "lms_response": data,
+    }
+
+
+
+
+def set_player_volume(player_id: str = "", volume=None) -> dict:
+    resolved_player_id = resolve_player_id(player_id)
+    resolved_volume = resolve_volume(volume)
+
+    data = lms_request(resolved_player_id, ["mixer", "volume", str(resolved_volume)])
+    return {
+        "ok": True,
+        "player_id": resolved_player_id,
+        "volume": resolved_volume,
+        "lms_response": data,
+    }
+
+
+import time
+
+def play_url_on_player(player_id: str, url: str, volume=None) -> dict:
+    resolved_player_id = resolve_player_id(player_id)
+    volume_result = set_player_volume(player_id, volume)
+
+    stop_result = lms_request(resolved_player_id, ["stop"])
+
+    load_result = lms_request(
+        resolved_player_id,
+        ["playlist", "play", url, "House AI"],
+    )
+
+    key = (player_id or "").strip().lower()
+
+    if key in {"living", "livingarea"}:
+        time.sleep(1.2)
+        play_result = lms_request(resolved_player_id, ["play"])
+        time.sleep(0.4)
+        play_result_2 = lms_request(resolved_player_id, ["play"])
+    else:
+        time.sleep(0.35)
+        play_result = lms_request(resolved_player_id, ["play"])
+        play_result_2 = None
+
+    return {
+        "ok": True,
+        "player_id": resolved_player_id,
+        "volume": volume_result["volume"],
+        "url": url,
+        "lms_stop_response": stop_result,
+        "lms_response": load_result,
+        "lms_play_response": play_result,
+        "lms_play_response_2": play_result_2,
+    }
+
+def say_text(text: str, player_id: str = "", volume=None) -> dict:
+    audio = synthesize_wav(text)
+    playback = play_url_on_player(player_id=player_id, url=audio["url"], volume=volume)
+
+    return {
+        "ok": True,
+        "status": "ok",
+        "text": audio["text"],
+        "audio_file": audio["filename"],
+        "audio_url": audio["url"],
+        "player_id": playback["player_id"],
+        "volume": playback["volume"],
+        "lms_response": playback["lms_response"],
+        "lms_stop_response": playback["lms_stop_response"],
+        "lms_play_response": playback["lms_play_response"],
+        "lms_play_response_2": playback["lms_play_response_2"],
+    }
+
+
+def announce_text(
+    text: str,
+    player_id: str = "",
+    volume=None,
+    prefix: str = "",
+) -> dict:
+    final_text = text.strip()
+    if prefix:
+        final_text = f"{prefix}. {final_text}"
+    return say_text(final_text, player_id=player_id, volume=volume)

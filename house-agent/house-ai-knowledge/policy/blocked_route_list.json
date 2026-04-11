@@ -1,0 +1,14 @@
+{
+  "version": "2026-03-27",
+  "notes": [
+    "Blocked routes must not be called autonomously by the AI.",
+    "This includes recursive agent entrypoints and routes that bypass protected control paths."
+  ],
+  "routes": [
+    "/agent/query",
+    "/tools/audio/switch_raw",
+    "/tools/audio/relay_raw",
+    "/tools/experimental/execute",
+    "/tools/network_scan"
+  ]
+}

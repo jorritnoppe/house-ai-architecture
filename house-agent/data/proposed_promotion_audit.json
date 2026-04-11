@@ -1,0 +1,97 @@
+[
+  {
+    "id": "audit_1773005013392",
+    "proposal_id": "proposal_1773003556861",
+    "target": "production",
+    "proposal_status": "promoted_to_experimental",
+    "target_path": "/home/jnoppe/house-agent/tools/valid_test_tool.py",
+    "allow_overwrite": false,
+    "validation": {
+      "status": "ok",
+      "ok": true,
+      "checks": [
+        {
+          "check": "python_syntax",
+          "ok": true,
+          "message": "Python syntax is valid."
+        },
+        {
+          "check": "module_exec",
+          "ok": true,
+          "message": "Code executed successfully in isolated validation context."
+        },
+        {
+          "check": "tool_spec_exists",
+          "ok": true,
+          "message": "TOOL_SPEC exists."
+        },
+        {
+          "check": "tool_spec_type",
+          "ok": true,
+          "message": "TOOL_SPEC is a dict."
+        },
+        {
+          "check": "tool_spec_required_keys",
+          "ok": true,
+          "message": "TOOL_SPEC contains all required keys."
+        },
+        {
+          "check": "run_exists",
+          "ok": true,
+          "message": "run(args) exists and is callable."
+        }
+      ],
+      "message": "Proposal validation passed.",
+      "tool_spec_preview": {
+        "name": "AI_gen_valid_test_tool",
+        "description": "Validation test tool.",
+        "safety": "read_only"
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "ok": true,
+      "checks": [
+        {
+          "check": "proposal_validation",
+          "ok": true,
+          "message": "Proposal validation passed."
+        },
+        {
+          "check": "safe_target_path",
+          "ok": true,
+          "message": "/home/jnoppe/house-agent/tools/valid_test_tool.py"
+        },
+        {
+          "check": "target_file_overwrite",
+          "ok": true,
+          "message": "Target file does not exist."
+        },
+        {
+          "check": "tool_name_collision",
+          "ok": true,
+          "message": "No tool name collision detected."
+        },
+        {
+          "check": "temporary_compile",
+          "ok": true,
+          "message": "Temporary compile check passed."
+        }
+      ],
+      "message": "Preflight passed for production promotion.",
+      "target_path": "/home/jnoppe/house-agent/tools/valid_test_tool.py",
+      "tool_name": "AI_gen_valid_test_tool"
+    },
+    "dependency_analysis": {
+      "status": "ok",
+      "imports_found": [],
+      "stdlib_imports": [],
+      "local_imports": [],
+      "third_party_imports": [],
+      "installed_packages": [],
+      "missing_packages": [],
+      "requires_install": false
+    },
+    "created_at": "2026-03-08T21:23:33.392391+00:00"
+  }
+]

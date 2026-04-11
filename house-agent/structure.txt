@@ -1,0 +1,47 @@
+.
+├── apc_ai.py
+├── app.py
+├── app.py.known-good
+├── app.py.save
+├── app.py.save.1
+├── buderus_module.py
+├── buderus_module.py.working
+├── config.py
+├── extensions.py
+├── ollama_client.py
+├── Pdata.py
+├── router_logic.py
+├── router_logic.py.save
+├── router_tools.py
+├── routes
+│   ├── agent_routes.py
+│   ├── health_routes.py
+│   ├── openai_routes.py
+│   ├── pdata_routes.py
+│   ├── power_routes.py
+│   ├── price_routes.py
+│   ├── sma_routes.py
+│   └── water_routes.py
+├── services
+│   ├── agent_crypto.py
+│   ├── agent_crypto.py.known-good
+│   ├── agent_house.py
+│   ├── agent_house.py.known-good
+│   ├── agent_service.py
+│   ├── agent_service.py.before-agent-house
+│   ├── agent_service.py.final-refactor-good
+│   ├── compare_service.py
+│   ├── influx_helpers.py
+│   ├── intent_detection.py
+│   ├── intent_detection.py.known-good
+│   ├── pdata_service.py
+│   ├── power_service.py
+│   ├── price_service.py
+│   ├── sma_service.py
+│   └── water_service.py
+├── sma_ai.py
+├── structure.txt
+├── tools_crypto.py
+└── tools.py
+
+3 directories, 42 files

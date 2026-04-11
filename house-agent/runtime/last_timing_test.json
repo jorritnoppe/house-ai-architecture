@@ -1,0 +1,172 @@
+{
+  "saved_at": "2026-03-31T16:12:40.544133+00:00",
+  "result": {
+    "status": "ok",
+    "session_id": "timing_846281ca7c24",
+    "pattern": {
+      "path": "/tmp/house-agent-voice/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+      "filename": "test_pattern_654b2c09345e44f09c40f00929eba02a.wav"
+    },
+    "pattern_url": "http://192.168.9.182:8010/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+    "arm_result": {
+      "armed_at": "2026-03-31T16:12:22.168756+00:00",
+      "label": "timing_test",
+      "metadata": {
+        "pattern_filename": "test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+        "pattern_url": "http://192.168.9.182:8010/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+        "session_id": "timing_846281ca7c24",
+        "target": "desk",
+        "volume": 60
+      },
+      "mode": "timing_capture",
+      "pre_roll_seconds": 2,
+      "requested_seconds": 18,
+      "session_id": "timing_846281ca7c24",
+      "status": "armed"
+    },
+    "playback": {
+      "ok": true,
+      "player_id": "b8:27:eb:55:b2:8d",
+      "volume": 60.0,
+      "url": "http://192.168.9.182:8010/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+      "lms_stop_response": {
+        "params": [
+          "b8:27:eb:55:b2:8d",
+          [
+            "stop"
+          ]
+        ],
+        "result": {},
+        "id": 1,
+        "method": "slim.request"
+      },
+      "lms_clear_response": {
+        "result": {},
+        "params": [
+          "b8:27:eb:55:b2:8d",
+          [
+            "playlist",
+            "clear"
+          ]
+        ],
+        "id": 1,
+        "method": "slim.request"
+      },
+      "lms_response": {
+        "params": [
+          "b8:27:eb:55:b2:8d",
+          [
+            "playlist",
+            "play",
+            "http://192.168.9.182:8010/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+            "House AI"
+          ]
+        ],
+        "result": {},
+        "id": 1,
+        "method": "slim.request"
+      },
+      "lms_play_response": {
+        "result": {},
+        "params": [
+          "b8:27:eb:55:b2:8d",
+          [
+            "play"
+          ]
+        ],
+        "id": 1,
+        "method": "slim.request"
+      },
+      "lms_play_response_2": {
+        "params": [
+          "b8:27:eb:55:b2:8d",
+          [
+            "play"
+          ]
+        ],
+        "result": {},
+        "method": "slim.request",
+        "id": 1
+      }
+    },
+    "probe_saved": {
+      "armed_at": "2026-03-31T16:12:22.168756+00:00",
+      "completed_at": "2026-03-31T16:12:40.179049+00:00",
+      "label": "timing_test",
+      "metadata": {
+        "pattern_filename": "test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+        "pattern_url": "http://192.168.9.182:8010/test_pattern_654b2c09345e44f09c40f00929eba02a.wav",
+        "session_id": "timing_846281ca7c24",
+        "target": "desk",
+        "volume": 60
+      },
+      "mode": "timing_capture",
+      "pre_roll_seconds": 2,
+      "recording_started_at": "2026-03-31T16:12:22.169108+00:00",
+      "requested_seconds": 18,
+      "rms": 0.02750207670032978,
+      "samples": 319488,
+      "saved_to": "/home/jnoppe/feedback-node/captures/timing/timing_test_20260331_181240.wav",
+      "session_id": "timing_846281ca7c24",
+      "status": "completed"
+    },
+    "local_probe_path": "/tmp/feedback-probe-tests/timing_test_20260331_181240.wav",
+    "analysis": {
+      "status": "ok",
+      "path": "/tmp/feedback-probe-tests/timing_test_20260331_181240.wav",
+      "sample_rate": 16000,
+      "threshold": 0.12,
+      "beep_count": 5,
+      "beeps": [
+        {
+          "index": 1,
+          "start_sec": 4.4966,
+          "end_sec": 4.7996,
+          "duration_sec": 0.3031,
+          "peak": 0.3996
+        },
+        {
+          "index": 2,
+          "start_sec": 5.4809,
+          "end_sec": 5.8086,
+          "duration_sec": 0.3277,
+          "peak": 0.5832
+        },
+        {
+          "index": 3,
+          "start_sec": 6.4755,
+          "end_sec": 6.7817,
+          "duration_sec": 0.3062,
+          "peak": 0.3006
+        },
+        {
+          "index": 4,
+          "start_sec": 7.4804,
+          "end_sec": 7.8061,
+          "duration_sec": 0.3257,
+          "peak": 0.5265
+        },
+        {
+          "index": 5,
+          "start_sec": 8.4738,
+          "end_sec": 8.7777,
+          "duration_sec": 0.3039,
+          "peak": 0.2699
+        }
+      ],
+      "start_intervals_sec": [
+        0.9843,
+        0.9946,
+        1.0049,
+        0.9934
+      ]
+    },
+    "summary": {
+      "status": "ok",
+      "beep_count": 5,
+      "first_beep_offset_sec": 4.4966,
+      "avg_beep_duration_sec": 0.3133,
+      "avg_interval_sec": 0.9943
+    }
+  }
+}

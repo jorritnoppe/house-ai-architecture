@@ -1,0 +1,99 @@
+{
+  "version": "2026-03-31",
+  "policy_name": "house_agent_operational_policy",
+  "notes": [
+    "Hand-updated operational policy aligned with canonical knowledge docs and exact discovered route names.",
+    "Read routes are preferred over action routes.",
+    "Protected audio paths and trigger-style controls must preserve service-layer logic.",
+    "All mapped actions must still be validated against route and tool allowlists."
+  ],
+  "default_behavior": {
+    "unknown_route": "deny",
+    "unknown_tool": "deny",
+    "unknown_intent": "explain_only",
+    "prefer_read_routes": true,
+    "require_review_for_action_routes": true,
+    "allow_recursive_agent_call": false
+  },
+  "intent_modes": {
+    "power_current": "safe",
+    "climate_latest": "safe",
+    "telemetry_summary": "safe",
+    "energy_summary": "safe",
+    "house_status": "safe",
+    "music_status": "safe",
+    "audio_timing_health": "safe",
+    "audio_timing_last": "safe",
+    "audio_output_confidence": "safe",
+    "audio_timing_run": "review",
+    "voice_output": "review",
+    "music_control_living": "review",
+    "music_control_toilet": "review",
+    "music_control_party": "review",
+    "music_reset": "review",
+    "audio_node_power": "review",
+    "agent_self_call": "blocked",
+    "node_health_overview": "safe",
+    "node_health_detail": "safe",
+    "service_health": "safe",
+    "services_overview": "safe",
+    "service_health_detail": "safe",
+    "house_state": "safe",
+    "playback_state": "safe"
+  },
+  "special_rules": [
+    {
+      "name": "living_room_audio_protection",
+      "applies_to": [
+        "/tools/audio/announce",
+        "/tools/music/living/on",
+        "/tools/music/living/off"
+      ],
+      "rule": "Preserve protected living-room prepare/play/release behavior through existing services. Do not bypass service-layer handling."
+    },
+    {
+      "name": "trigger_style_controls",
+      "applies_to": [
+        "/tools/music/living/on",
+        "/tools/music/living/off",
+        "/tools/music/toilet/on",
+        "/tools/music/toilet/off",
+        "/tools/music/party/on",
+        "/tools/music/party/off",
+        "/tools/music/reset"
+      ],
+      "rule": "Treat these as approved trigger-style controls. Do not assume persistent device state beyond documented behavior."
+    },
+    {
+      "name": "parameterized_node_power_route",
+      "applies_to": [
+        "/tools/audio/node_power/<state>"
+      ],
+      "rule": "Use only approved state values such as on or off and preserve room-mapping and service-layer control logic."
+    },
+    {
+      "name": "no_recursive_agent_execution",
+      "applies_to": [
+        "/agent/query"
+      ],
+      "rule": "The autonomous agent must not call its own top-level natural-language route as an action target."
+    }
+  ],
+  "audio_validation_policy": {
+    "read_only_routes": [
+      "/ai/audio_timing_health",
+      "/ai/audio_timing_last",
+      "/ai/audio_output_confidence"
+    ],
+    "review_required_routes": [
+      "/ai/audio_timing_run"
+    ],
+    "rules": [
+      "Use /ai/audio_timing_health for quick speaker timing health checks.",
+      "Use /ai/audio_timing_last for detailed diagnostics and debugging context.",
+      "Use /ai/audio_output_confidence when the user asks whether playback is likely audible or trustworthy.",
+      "Use /ai/audio_timing_run only when the user explicitly asks to validate or rerun speaker timing.",
+      "Do not run audible timing tests automatically without explicit user intent."
+    ]
+  }
+}

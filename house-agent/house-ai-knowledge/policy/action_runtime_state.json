@@ -1,0 +1,20 @@
+{
+  "actions": {
+    "music_bathroom_start": {
+      "active": true,
+      "updated_at": 1775161367
+    },
+    "music_living_start": {
+      "active": false,
+      "updated_at": 1775158009
+    },
+    "music_party_start": {
+      "active": false,
+      "updated_at": 1775158010
+    },
+    "music_wc_start": {
+      "active": false,
+      "updated_at": 1775158009
+    }
+  }
+}

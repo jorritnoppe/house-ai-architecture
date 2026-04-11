@@ -6,6 +6,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 .env
+*.env
 .venv/
 venv/
 node_modules/
@@ -13,5 +14,18 @@ node_modules/
 *.key
 secrets/
 private/
-*.bak
 .DS_Store
+*.tar.gz
+*.ctl
+
+# project runtime / generated / backups
+*/data/voice_uploads/
+*/data/voice_files/
+*/backups/
+*.save
+*.save.*
+*.bak
+*.known-good
+*.working
+*.before_*
+*.broken_*

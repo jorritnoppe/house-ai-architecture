@@ -1,0 +1,13 @@
+{
+  "version": "2026-03-27",
+  "notes": [
+    "Safe tools should be read-oriented or low-risk helpers with no uncontrolled physical side effects."
+  ],
+  "tools": [
+    "power_current",
+    "climate_latest",
+    "telemetry_summary",
+    "energy_summary",
+    "house_status"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "version": "2026-03-27",
+  "notes": [
+    "Tools listed here require review or explicit user/operator intent before autonomous use.",
+    "This list is intentionally non-empty to support a middle lane between safe and blocked."
+  ],
+  "tools": [
+    "audio_announce",
+    "music_control_living",
+    "music_control_toilet",
+    "music_control_party",
+    "audio_node_power",
+    "proposed_tool_validation",
+    "tool_promotion",
+    "experimental_tool_execution"
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "clients": {
+    "c8:7f:54:65:d6:7c": {
+      "name": "ai-server",
+      "role": "ai_server",
+      "room": "masterbedroom",
+      "critical": true
+    },
+    "2c:cf:67:4f:7c:24": {
+      "name": "DeskPi",
+      "role": "house_sensor",
+      "room": "deskroom",
+      "critical": true
+    },
+    "d8:3a:dd:b4:7a:93": {
+      "name": "ElectricPi",
+      "role": "house_sensor",
+      "room": "storageroom",
+      "critical": true
+    },
+    "c8:60:00:8e:b1:36": {
+      "name": "TrueNAS",
+      "role": "storage",
+      "room": "storageroom",
+      "critical": true
+    },
+    "50:4f:94:a0:45:75": {
+      "name": "Loxone",
+      "role": "automation_controller",
+      "room": "attickroom",
+      "critical": true
+    },
+    "d8:3a:dd:af:ea:3e": {
+      "name": "AudioPi_Toilet",
+      "role": "audio_node",
+      "room": "toilet",
+      "critical": true
+    },
+    "d8:3a:dd:3e:08:37": {
+      "name": "AudioPi_Livingarea",
+      "role": "audio_node",
+      "room": "livingroom",
+      "critical": true
+    },
+    "d8:3a:dd:0c:92:2d": {
+      "name": "AudioPi_Bass",
+      "role": "audio_node",
+      "room": "storageroom",
+      "critical": false
+    },
+    "b8:27:eb:55:b2:8d": {
+      "name": "AudioPi_Desk",
+      "role": "audio_node",
+      "room": "deskroom",
+      "critical": true
+    },
+    "b8:27:eb:58:aa:97": {
+      "name": "AudioPi_Bathroom",
+      "role": "audio_node",
+      "room": "bathroom",
+      "critical": true
+    },
+    "2c:cf:67:3f:d9:08": {
+      "name": "DiscoverPi",
+      "role": "house_sensor",
+      "room": "all",
+      "critical": false
+    },
+    "d8:3a:dd:0d:29:6e": {
+      "name": "AttackPi",
+      "role": "house_sensor",
+      "room": "attickroom",
+      "critical": false
+    },
+    "28:87:ba:d9:58:f8": {
+      "name": "MyPC",
+      "role": "workstation",
+      "room": "deskroom",
+      "critical": false
+    },
+    "e0:bb:9e:33:82:0c": {
+      "name": "EPSON33820C",
+      "role": "printer",
+      "room": "livingroom",
+      "critical": true
+    },
+    "2c:ab:33:ca:8c:81": {
+      "name": "SMA3008461467",
+      "role": "solar_inverter",
+      "room": "attickroom",
+      "critical": true
+    },
+    "e4:65:b8:0b:db:14": {
+      "name": "BuderusPI",
+      "role": "heating_node",
+      "room": "attickroom",
+      "critical": true
+    },
+    "b8:27:eb:07:3c:26": {
+      "name": "LuifelPI",
+      "role": "voice_node",
+      "room": "kitchenroom",
+      "critical": false
+    },
+    "f8:36:9b:e6:ab:4e": {
+      "name": "Healthbox3",
+      "role": "ventilation_system",
+      "room": "attickroom",
+      "critical": true
+    },
+    "10:d1:dc:22:54:29": {
+      "name": "UPStairPi",
+      "role": "house_sensor",
+      "room": "attickroom",
+      "critical": false
+    },
+    "26:8f:67:5b:34:a7": {
+      "name": "unknown-client-1",
+      "role": "unknown",
+      "room": "unknown",
+      "critical": false
+    },
+    "f2:15:04:db:bd:75": {
+      "name": "unknown-client-2",
+      "role": "unknown",
+      "room": "unknown",
+      "critical": false
+    },
+    "2c:76:8a:57:13:20": {
+      "name": "Hewlett Packard",
+      "role": "unknown_hp_device",
+      "room": "unknown",
+      "critical": false
+    },
+    "1c:ca:e3:79:f8:3f": {
+      "name": "bha-1CCAE3726AA7",
+      "role": "camera_or_iot",
+      "room": "unknown",
+      "critical": false
+    },
+    "98:fe:3e:a3:e9:81": {
+      "name": "Worklaptop_JEBE",
+      "role": "laptop",
+      "portable": true,
+      "room": "all",
+      "critical": false
+    },
+    "ba:62:87:d6:25:ec": {
+      "name": "OnePlus-Nord-CE5",
+      "role": "phone",
+      "room": "all",
+      "portable": true,
+      "critical": false
+    },
+    "00:a0:98:1a:e8:0b": {
+      "name": "kali",
+      "role": "VM_truenas",
+      "room": "storageroom",
+      "critical": false
+    },
+    "e4:b0:63:f9:a0:ec": {
+      "name": "shellyplugsg3-e4b063f9a0ec",
+      "role": "smart_plug",
+      "room": "unknown",
+      "critical": false
+    }
+  },
+  "infrastructure": {
+    "d0:21:f9:d8:30:43": {
+      "name": "DreamMachineNoppe",
+      "role": "gateway",
+      "room": "storageroom",
+      "critical": true
+    },
+    "ac:8b:a9:19:7f:74": {
+      "name": "USW Lite 16 PoE",
+      "role": "core_switch",
+      "room": "storageroom",
+      "critical": true
+    },
+    "60:22:32:46:75:52": {
+      "name": "USW-Flex-Mini_Deskroom",
+      "role": "room_switch",
+      "room": "deskroom",
+      "critical": true
+    },
+    "60:22:32:46:76:85": {
+      "name": "USW-Flex-Mini_TV",
+      "role": "room_switch",
+      "room": "livingroom",
+      "critical": false
+    },
+    "60:22:32:46:72:c9": {
+      "name": "USW-Flex-Mini-ATTIC",
+      "role": "room_switch",
+      "room": "attickroom",
+      "critical": false
+    },
+    "f4:92:bf:8e:9a:21": {
+      "name": "US 8 60W",
+      "role": "core_switch",
+      "room": "attickroom",
+      "critical": true
+    },
+    "f4:92:bf:26:be:05": {
+      "name": "UAP-AC-Lite-DESK",
+      "role": "access_point",
+      "room": "deskroom",
+      "critical": true
+    },
+    "60:22:32:fd:81:51": {
+      "name": "U6-Pro-TV",
+      "role": "access_point",
+      "room": "storageroom",
+      "critical": false
+    },
+    "f4:92:bf:26:c8:1e": {
+      "name": "UAP-AC-Lite-BED",
+      "role": "access_point",
+      "room": "masterbedroom",
+      "critical": false
+    },
+    "f4:92:bf:26:c0:23": {
+      "name": "UAP-AC-Lite-ATTIC",
+      "role": "access_point",
+      "room": "attickroom",
+      "critical": false
+    }
+  }
+}

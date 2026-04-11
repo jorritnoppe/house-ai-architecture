@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "audio": [
+    "control_audiobathroom_start_button",
+    "control_audiobathroom_stop_button",
+    "control_audiolivingroom_start_button",
+    "control_audiolivingroom_stop_button",
+    "control_audioparty_start_button",
+    "control_audioparty_stop_button",
+    "picore_livingroom_route_switch",
+    "picore_storageroom_route_switch",
+    "picore_wcroom_route_switch",
+    "picore_alloffroom_power_button",
+    "picore_allonroom_power_button",
+    "bathroom_audio_start_scene_button",
+    "bathroom_audio_stop_scene_button",
+    "livingroom_audio_start_scene_button",
+    "livingroom_audio_stop_scene_button",
+    "livingroom_audio_party_start_scene_button",
+    "livingroom_audio_party_stop_scene_button",
+    "wcroom_audio_start_scene_button",
+    "wcroom_audio_start_night_scene_button",
+    "wcroom_audio_stop_scene_button"
+  ],
+  "power": [
+    "picore_bathroom_power_switch",
+    "picore_livingroom_power_switch",
+    "picore_toiletroom_power_switch",
+    "picore_bassroom_power_switch"
+  ],
+  "lighting": [
+    "terrasroom_lighting_schedule"
+  ],
+  "shading": [
+    "kitchenroom_luifel_pattern_off_button",
+    "kitchenroom_luifel_pattern_selector",
+    "kitchenroom_luifel_pattern_update_button",
+    "kitchenroom_pattern_wave_off_button",
+    "kitchenroom_pattern_wave_on_button"
+  ]
+}

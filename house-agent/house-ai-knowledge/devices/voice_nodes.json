@@ -1,0 +1,19 @@
+{
+  "nodes": [
+    {
+      "node_id": "deskmic",
+      "host": "DeskPi",
+      "room": "deskroom",
+      "type": "fixed_room_mic",
+      "transport": "http",
+      "default_output_target": "desk",
+      "enabled": true,
+      "capabilities": {
+        "wakeword": true,
+        "speech_capture": true,
+        "debug_feedback": false
+      },
+      "notes": "Current only active mic node. Mic array connected to DeskPi in deskroom. DeskPi sends events to AI server. Desk audio target is desk."
+    }
+  ]
+}

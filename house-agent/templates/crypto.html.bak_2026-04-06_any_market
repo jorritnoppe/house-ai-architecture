@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>House Crypto Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      background: #111;
+      color: #eee;
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    .card {
+      background: #1b1b1b;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+      vertical-align: top;
+    }
+    input, select, button {
+      padding: 10px;
+      margin: 4px 0;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #222;
+      color: #eee;
+    }
+    button {
+      cursor: pointer;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .muted {
+      color: #aaa;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0d0d0d;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #222;
+      min-height: 60px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #444;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>House Crypto Control</h1>
+
+  <div class="card">
+    <h2>Portfolio</h2>
+    <div id="portfolio-summary" class="muted">Loading holdings...</div>
+    <table id="holdings-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Amount</th>
+          <th>EUR Price</th>
+          <th>EUR Value</th>
+          <th>Locked</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Buy Preview</h2>
+    <div class="row">
+      <select id="buy-symbol">
+        <option value="BTC">BTC</option>
+        <option value="ETH" selected>ETH</option>
+        <option value="ADA">ADA</option>
+        <option value="XRP">XRP</option>
+        <option value="SOL">SOL</option>
+      </select>
+      <input id="buy-eur" type="number" step="0.01" min="0.01" placeholder="EUR amount">
+      <button onclick="previewBuy()">Preview Buy</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Sell Preview</h2>
+    <div class="row">
+      <select id="sell-symbol"></select>
+      <input id="sell-amount" type="number" step="0.00000001" min="0.00000001" placeholder="Asset amount">
+      <button onclick="previewSell()">Preview Sell</button>
+      <button onclick="sellAll()">Sell All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Latest Preview</h2>
+    <pre id="preview-box">No preview yet.</pre>
+    <div class="row">
+      <button onclick="requestApproval()">Request Approval</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Pending Approvals</h2>
+    <pre id="approval-box">Loading...</pre>
+  </div>
+
+  <div class="card">
+    <h2>Recent Previews</h2>
+    <pre id="previews-box">Loading...</pre>
+  </div>
+
+  <script>
+    let latestPreview = null;
+    let latestHoldings = [];
+
+    async function fetchJson(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'request failed');
+      }
+      return data;
+    }
+
+    function fmt(v) {
+      if (v === null || v === undefined || v === '') return '';
+      return String(v);
+    }
+
+    async function loadHoldings() {
+      const data = await fetchJson('/api/trade/holdings');
+      latestHoldings = data.holdings || [];
+
+      const tbody = document.querySelector('#holdings-table tbody');
+      tbody.innerHTML = '';
+
+      const totals = data.totals || {};
+      document.getElementById('portfolio-summary').textContent =
+        `Assets: ${totals.asset_count || 0} | Total EUR value: ${totals.total_eur_value || 0}`;
+
+      const sellSelect = document.getElementById('sell-symbol');
+      const previousSellValue = sellSelect.value;
+      sellSelect.innerHTML = '';
+
+      for (const item of latestHoldings) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.symbol}</td>
+          <td>${fmt(item.amount)}</td>
+          <td>${fmt(item.eur_price)}</td>
+          <td>${fmt(item.eur_value)}</td>
+          <td>${item.locked ? '<span class="pill">LOCKED</span>' : '<span class="pill">OPEN</span>'}</td>
+          <td>
+            <button onclick="toggleLock('${item.symbol}', ${item.locked ? 'false' : 'true'})">
+              ${item.locked ? 'Unlock' : 'Lock'}
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+
+        const opt = document.createElement('option');
+        opt.value = item.symbol;
+        opt.textContent = item.symbol;
+        sellSelect.appendChild(opt);
+      }
+
+      if (previousSellValue && [...sellSelect.options].some(o => o.value === previousSellValue)) {
+        sellSelect.value = previousSellValue;
+      }
+    }
+
+    async function loadPendingApprovals() {
+      const data = await fetchJson('/ai/approvals/pending');
+      document.getElementById('approval-box').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function loadRecentPreviews() {
+      const data = await fetchJson('/api/trade/previews?limit=10');
+      document.getElementById('previews-box').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function previewBuy() {
+      try {
+        const symbol = document.getElementById('buy-symbol').value;
+        const eurAmount = parseFloat(document.getElementById('buy-eur').value);
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            side: 'buy',
+            symbol: symbol,
+            eur_amount: eurAmount
+          })
+        });
+
+        latestPreview = data;
+        document.getElementById('preview-box').textContent = JSON.stringify(data, null, 2);
+        await loadRecentPreviews();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Preview buy failed: ' + err.message;
+      }
+    }
+
+    async function previewSell() {
+      try {
+        const symbol = document.getElementById('sell-symbol').value;
+        const amount = parseFloat(document.getElementById('sell-amount').value);
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            side: 'sell',
+            symbol: symbol,
+            amount: amount
+          })
+        });
+
+        latestPreview = data;
+        document.getElementById('preview-box').textContent = JSON.stringify(data, null, 2);
+        await loadRecentPreviews();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Preview sell failed: ' + err.message;
+      }
+    }
+
+    async function sellAll() {
+      try {
+        const symbol = document.getElementById('sell-symbol').value;
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            side: 'sell',
+            symbol: symbol,
+            sell_all: true
+          })
+        });
+
+        latestPreview = data;
+        document.getElementById('preview-box').textContent = JSON.stringify(data, null, 2);
+        await loadRecentPreviews();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Sell all preview failed: ' + err.message;
+      }
+    }
+
+    async function requestApproval() {
+      try {
+        if (!latestPreview) {
+          throw new Error('No preview available');
+        }
+
+        const previewId = latestPreview.preview_id;
+        if (!previewId) {
+          throw new Error('Preview ID not found');
+        }
+
+        const data = await fetchJson('/api/trade/request-approval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            preview_id: previewId,
+            requested_by: 'crypto_ui'
+          })
+        });
+
+        document.getElementById('approval-box').textContent = JSON.stringify(data, null, 2);
+        await loadPendingApprovals();
+      } catch (err) {
+        document.getElementById('approval-box').textContent = 'Request approval failed: ' + err.message;
+      }
+    }
+
+    async function toggleLock(symbol, locked) {
+      try {
+        await fetchJson('/api/trade/lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: symbol,
+            locked: locked,
+            reason: locked ? 'manual_ui_lock' : 'manual_ui_unlock'
+          })
+        });
+        await loadHoldings();
+      } catch (err) {
+        alert('Lock update failed: ' + err.message);
+      }
+    }
+
+    async function refreshAll() {
+      try { await loadHoldings(); } catch (err) {}
+      try { await loadPendingApprovals(); } catch (err) {}
+      try { await loadRecentPreviews(); } catch (err) {}
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 2000);
+  </script>
+</body>
+</html>

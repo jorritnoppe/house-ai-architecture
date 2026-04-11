@@ -1,0 +1,250 @@
+{
+  "version": "2026-03-31",
+  "notes": [
+    "Updated to match current house-agent route style and exact discovered route names.",
+    "This file maps high-level intents to approved route targets or tool names.",
+    "Routes listed here must still be checked against route policy files before execution."
+  ],
+  "intents": {
+
+
+
+    "house_state": {
+      "description": "Get normalized whole-house state across power, telemetry, audio, nodes, services, and crypto.",
+      "preferred_routes": [
+        "/ai/house_state"
+      ],
+      "fallback_routes": [
+        "/ai/house_state_summary"
+      ],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "playback_state": {
+      "description": "Get unified playback and wake-suppression state.",
+      "preferred_routes": [
+        "/ai/playback_state"
+      ],
+      "fallback_routes": [
+        "/voice/playback_state",
+        "/tools/audio/state"
+      ],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+
+
+
+    "power_current": {
+      "description": "Get current house power usage.",
+      "preferred_routes": [
+        "/ai/power_now"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "climate_latest": {
+      "description": "Get latest room temperature and humidity summary.",
+      "preferred_routes": [
+        "/ai/loxone_history_telemetry_latest"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "telemetry_summary": {
+      "description": "Summarize latest house telemetry using approved aggregate endpoints.",
+      "preferred_routes": [
+        "/ai/loxone_history_telemetry_latest",
+        "/ai/power_now"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "energy_summary": {
+      "description": "Provide a house energy summary from approved energy endpoints.",
+      "preferred_routes": [
+        "/ai/power_now"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "voice_output": {
+      "description": "Speak a message through the approved announcement path.",
+      "preferred_routes": [
+        "/tools/audio/announce"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "music_control_living": {
+      "description": "Trigger approved living room music control endpoints.",
+      "preferred_routes": [
+        "/tools/music/living/on",
+        "/tools/music/living/off"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "music_control_toilet": {
+      "description": "Trigger approved toilet music control endpoints.",
+      "preferred_routes": [
+        "/tools/music/toilet/on",
+        "/tools/music/toilet/off"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "music_control_party": {
+      "description": "Trigger approved party music control endpoints.",
+      "preferred_routes": [
+        "/tools/music/party/on",
+        "/tools/music/party/off"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "music_status": {
+      "description": "Read current music control status.",
+      "preferred_routes": [
+        "/tools/music/status"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "music_reset": {
+      "description": "Trigger music control reset behavior through the approved endpoint.",
+      "preferred_routes": [
+        "/tools/music/reset"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "audio_node_power": {
+      "description": "Control playback node power through the approved parameterized node power route.",
+      "preferred_routes": [
+        "/tools/audio/node_power/<state>"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "action_review"
+    },
+    "house_status": {
+      "description": "Provide a general house status summary by combining safe read routes.",
+      "preferred_routes": [
+        "/ai/power_now",
+        "/ai/loxone_history_telemetry_latest"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "agent_self_call": {
+      "description": "Reserved internal capability. The autonomous agent must not recursively call its own main query route.",
+      "preferred_routes": [
+        "/agent/query"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "blocked"
+    },
+    "audio_timing_health": {
+      "type": "route",
+      "target": "/ai/audio_timing_health",
+      "method": "GET"
+    },
+    "audio_timing_last": {
+      "type": "route",
+      "target": "/ai/audio_timing_last",
+      "method": "GET"
+    },
+    "audio_output_confidence": {
+      "type": "route",
+      "target": "/ai/audio_output_confidence",
+      "method": "GET"
+    },
+    "audio_timing_run": {
+      "type": "route",
+      "target": "/ai/audio_timing_run",
+      "method": "POST",
+      "json_template": {
+        "target": "desk",
+        "volume": 60,
+        "probe_seconds_back": 18,
+        "probe_label": "timing_test"
+      },
+
+
+
+    "node_health_overview": {
+      "description": "Get compact health status for all monitored nodes.",
+      "preferred_routes": [
+        "/ai/nodes/health"
+      ],
+      "fallback_routes": [
+        "/ai/nodes/overview"
+      ],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "node_health_detail": {
+      "description": "Get detailed health summary for a specific monitored node.",
+      "preferred_routes": [
+        "/ai/node/summary"
+      ],
+      "fallback_routes": [
+        "/ai/node/alerts"
+      ],
+      "preferred_tools": [],
+      "mode": "read",
+      "params": [
+        "node"
+      ]
+    },
+
+    "service_health": {
+      "description": "Get local service health for key AI services.",
+      "preferred_routes": [
+        "/ai/service/health"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "services_overview": {
+      "description": "Get service health overview across configured nodes.",
+      "preferred_routes": [
+        "/ai/services/overview"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read"
+    },
+    "service_health_detail": {
+      "description": "Get service health summary for one configured node.",
+      "preferred_routes": [
+        "/ai/service/summary"
+      ],
+      "fallback_routes": [],
+      "preferred_tools": [],
+      "mode": "read",
+      "params": [
+        "node"
+      ]
+    }
+
+
+
+
+    }
+  }
+}

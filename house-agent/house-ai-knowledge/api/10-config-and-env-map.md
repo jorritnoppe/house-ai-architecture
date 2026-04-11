@@ -1,0 +1,54 @@
+# Config and Environment Map
+
+## File observed
+- config.py
+- .env exists in repo root and must never be uploaded into knowledge
+
+## Observed config domains
+### InfluxDB
+- INFLUX_URL
+- INFLUX_TOKEN
+- INFLUX_ORG
+- INFLUX_BUCKET
+- INFLUX_MEASUREMENT
+
+### Price
+- PRICE_INFLUX_BUCKET
+- PRICE_INFLUX_MEASUREMENT
+- PRICE_INFLUX_FIELD
+- PRICE_WINDOW
+
+### Water / salt
+- SALT_INFLUX_BUCKET
+- SALT_INFLUX_MEASUREMENT
+- SALT_INFLUX_FIELD
+- SALT_FULL_CM
+- SALT_EMPTY_CM
+- WATER_TEMP_BUCKET
+- WATER_TEMP_MEASUREMENT
+- WATER_TEMP1_FIELD
+- WATER_TEMP2_FIELD
+- WATER_TEMP1_DIVISOR
+
+### SMA
+- SMA_INFLUX_BUCKET
+- SMA_INFLUX_MEASUREMENT
+- SMA_AC_POWER_FIELD
+- SMA_DAILY_ENERGY_FIELD
+- SMA_GRID_VOLTAGE_FIELD
+- SMA_INVERTER_TEMP_FIELD
+- SMA_PV_CURRENT_FIELD
+- SMA_PV_VOLTAGE_FIELD
+- SMA_TOTAL_ENERGY_FIELD
+- divisors
+
+### Loxone
+- LOXONE_HOST
+- LOXONE_USER
+- LOXONE_PASSWORD
+
+### Experimental tooling
+- EXPERIMENTAL_APPROVAL_PASSWORD_HASH
+
+## Rule
+Document variable meaning and example values, never real secrets.

@@ -1,0 +1,15 @@
+{
+  "version": "2026-03-27",
+  "notes": [
+    "Blocked tools must not be autonomously used by the house AI.",
+    "These are either unsafe, too powerful, or not yet approved."
+  ],
+  "tools": [
+    "network_scan",
+    "raw_device_http",
+    "raw_loxone_write",
+    "experimental_tool_execution_unapproved",
+    "agent_recursive_self_call",
+    "shell_command_execution"
+  ]
+}

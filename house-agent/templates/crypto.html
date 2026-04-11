@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>House Crypto Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      background: #111;
+      color: #eee;
+    }
+
+    h1, h2, h3 { margin-top: 0; }
+
+    .card {
+      background: #1b1b1b;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      background: #1b1b1b;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .label {
+      color: #aaa;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #1b1b1b;
+      color: #eee;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      border-color: #888;
+      background: #222;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    tr.locked-row { background: rgba(255, 200, 0, 0.06); }
+    tr.zero-row { opacity: 0.7; }
+
+    input, select, button, textarea {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #222;
+      color: #eee;
+      font-family: inherit;
+    }
+
+    button { cursor: pointer; }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .pill {
+      display: inline-block;
+      border: 1px solid #444;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .pill.locked { border-color: #aa8844; color: #ffe2a8; }
+    .pill.open { border-color: #3d6b4f; color: #b9ffd3; }
+    .pill.ok { border-color: #2f8f5b; color: #baf5d1; }
+    .pill.err { border-color: #9c3d3d; color: #ffb3b3; }
+    .pill.warn { border-color: #aa8844; color: #ffe2a8; }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0d0d0d;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #222;
+      min-height: 60px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .health-strip {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .chip {
+      border: 1px solid #333;
+      background: #181818;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #ddd;
+    }
+
+    .audit-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .audit-item {
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      background: #121212;
+    }
+
+    .audit-top {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .audit-time {
+      color: #aaa;
+      font-size: 12px;
+    }
+
+    .audit-main {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px 16px;
+      margin-bottom: 8px;
+    }
+
+    .audit-field {
+      font-size: 13px;
+      color: #ddd;
+    }
+
+    .audit-label {
+      color: #888;
+      font-size: 12px;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .audit-error {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #5c2c2c;
+      background: #1f1010;
+      color: #ffb3b3;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .bar-wrap {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 90px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .bar-bg {
+      background: #0f0f0f;
+      border: 1px solid #2d2d2d;
+      border-radius: 999px;
+      height: 16px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2a5, #6a8);
+      border-radius: 999px;
+    }
+
+    .muted {
+      color: #aaa;
+    }
+
+    .strategy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .field-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-block label {
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>House Crypto Control</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('trade')" id="tab-btn-trade">Trade</button>
+    <button class="tab-btn" onclick="showTab('dashboard')" id="tab-btn-dashboard">Dashboard</button>
+    <button class="tab-btn" onclick="showTab('audit')" id="tab-btn-audit">Audit</button>
+    <button class="tab-btn" onclick="showTab('strategy')" id="tab-btn-strategy">Strategy</button>
+  </div>
+
+  <div class="health-strip">
+    <div class="chip" id="chip-pending">Pending approvals: -</div>
+    <div class="chip" id="chip-previews">Recent previews: -</div>
+    <div class="chip" id="chip-errors">Recent audit errors: -</div>
+  </div>
+
+  <!-- TRADE -->
+  <div id="tab-trade" class="tab-panel active">
+    <div class="cards">
+      <div class="stat"><div class="label">Total</div><div id="stat-total" class="value">-</div></div>
+      <div class="stat"><div class="label">Locked</div><div id="stat-locked" class="value">-</div></div>
+      <div class="stat"><div class="label">Unlocked</div><div id="stat-unlocked" class="value">-</div></div>
+      <div class="stat"><div class="label">Assets</div><div id="stat-assets" class="value">-</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Portfolio</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Amount</th>
+            <th>EUR</th>
+            <th>Value</th>
+            <th>Lock</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="holdings-table"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Buy</h2>
+      <div class="row">
+        <select id="buy-symbol"></select>
+        <input id="buy-eur" placeholder="EUR amount">
+        <button onclick="previewBuy()">Preview Buy</button>
+      </div>
+      <div class="muted" id="buy-market-info">Loading markets...</div>
+    </div>
+
+    <div class="card">
+      <h2>Sell</h2>
+      <div class="row">
+        <select id="sell-symbol"></select>
+        <input id="sell-amount" placeholder="Asset amount">
+        <button onclick="previewSell()">Preview Sell</button>
+        <button onclick="sellAll()">Sell All</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Preview</h2>
+      <pre id="preview-box">No preview yet.</pre>
+      <div class="row">
+        <button onclick="requestApproval()">Request Approval</button>
+      </div>
+    </div>
+
+    <div class="mini-grid">
+      <div class="card">
+        <h2>Pending Approvals</h2>
+        <pre id="approval-box">Loading...</pre>
+      </div>
+      <div class="card">
+        <h2>Recent Previews</h2>
+        <pre id="previews-box">Loading...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="tab-panel">
+    <div class="cards">
+      <div class="stat"><div class="label">Wallet</div><div id="dash-total" class="value">-</div></div>
+      <div class="stat"><div class="label">Locked</div><div id="dash-locked" class="value">-</div></div>
+      <div class="stat"><div class="label">Unlocked</div><div id="dash-unlocked" class="value">-</div></div>
+      <div class="stat"><div class="label">Zero</div><div id="dash-zero-count" class="value">-</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Portfolio Composition</h2>
+      <div id="portfolio-bars" class="bar-wrap">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>Top Holdings</h2>
+      <pre id="dashboard-top-holdings">Loading...</pre>
+    </div>
+
+    <div class="card">
+      <h2>Recent Errors</h2>
+      <pre id="dashboard-errors">Loading...</pre>
+    </div>
+
+    <div class="card">
+      <h2>Last Successful Trade</h2>
+      <pre id="dashboard-last-success">Loading...</pre>
+    </div>
+  </div>
+
+  <!-- AUDIT -->
+  <div id="tab-audit" class="tab-panel">
+    <div class="card">
+      <h2>Recent Trade Audit</h2>
+      <div id="audit-box" class="audit-list">Loading...</div>
+    </div>
+  </div>
+
+  <!-- STRATEGY -->
+  <div id="tab-strategy" class="tab-panel">
+    <div class="card">
+      <h2>Auto-Trade Strategy Controls</h2>
+      <div class="strategy-grid">
+        <div class="field-block">
+          <label>Enabled</label>
+          <select id="strategy-enabled">
+            <option value="false">false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Mode</label>
+          <select id="strategy-mode">
+            <option value="manual_only">manual_only</option>
+            <option value="dry_run_strategy">dry_run_strategy</option>
+            <option value="guarded_strategy">guarded_strategy</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Dry Run</label>
+          <select id="strategy-dry-run">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Max Buy EUR / Trade</label>
+          <input id="strategy-max-buy" type="number" step="0.01">
+        </div>
+
+        <div class="field-block">
+          <label>Max Sell EUR / Trade</label>
+          <input id="strategy-max-sell" type="number" step="0.01">
+        </div>
+
+        <div class="field-block">
+          <label>Max Open Positions</label>
+          <input id="strategy-max-positions" type="number" step="1">
+        </div>
+
+        <div class="field-block">
+          <label>Stop Loss %</label>
+          <input id="strategy-stop-loss" type="number" step="0.1">
+        </div>
+
+        <div class="field-block">
+          <label>Take Profit %</label>
+          <input id="strategy-take-profit" type="number" step="0.1">
+        </div>
+
+        <div class="field-block">
+          <label>Require Manual Approval For Buys</label>
+          <select id="strategy-approval-buys">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Require Manual Approval For Sells</label>
+          <select id="strategy-approval-sells">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Respect Locked Positions</label>
+          <select id="strategy-respect-locks">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+
+        <div class="field-block">
+          <label>Allowed Symbols (comma separated)</label>
+          <input id="strategy-allowed-symbols" type="text">
+        </div>
+
+        <div class="field-block">
+          <label>Blocked Symbols (comma separated)</label>
+          <input id="strategy-blocked-symbols" type="text">
+        </div>
+      </div>
+
+      <div class="field-block" style="margin-top: 12px;">
+        <label>Notes</label>
+        <textarea id="strategy-notes"></textarea>
+      </div>
+
+      <div class="row" style="margin-top: 12px;">
+        <button onclick="saveStrategyConfig()">Save Strategy Settings</button>
+      </div>
+
+      <pre id="strategy-box">Loading...</pre>
+    </div>
+  </div>
+
+  <script>
+    let latestHoldings = [];
+    let latestDashboard = null;
+    let latestPendingApprovals = null;
+    let latestRecentPreviews = null;
+    let latestAudit = null;
+    let latestPreview = null;
+    let latestStrategy = null;
+
+    function showTab(name) {
+      document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      document.getElementById('tab-btn-' + name).classList.add('active');
+    }
+
+    async function fetchJson(url, opt = {}) {
+      const r = await fetch(url, opt);
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data.error || data.message || 'request failed');
+      }
+      return data;
+    }
+
+    function euro(v) {
+      return Number(v || 0).toFixed(2);
+    }
+
+    function boolText(v) {
+      return v ? 'true' : 'false';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function csvToArray(value) {
+      return String(value || '')
+        .split(',')
+        .map(x => x.trim().toUpperCase())
+        .filter(Boolean);
+    }
+
+    function renderHealthStrip() {
+      const pendingCount = Number((latestPendingApprovals && latestPendingApprovals.count) || 0);
+      const previewCount = Number((latestRecentPreviews && latestRecentPreviews.count) || 0);
+      const auditItems = (latestAudit && latestAudit.items) || [];
+      const auditErrorCount = auditItems.filter(x =>
+        x.status !== 'ok' || String(x.event_type || '').includes('error')
+      ).length;
+
+      document.getElementById('chip-pending').textContent = `Pending approvals: ${pendingCount}`;
+      document.getElementById('chip-previews').textContent = `Recent previews: ${previewCount}`;
+      document.getElementById('chip-errors').textContent = `Errors: ${auditErrorCount}`;
+    }
+
+    async function loadMarkets() {
+      const data = await fetchJson('/api/trade/markets');
+      const items = data.items || [];
+
+      const buy = document.getElementById('buy-symbol');
+      buy.innerHTML = '';
+      items.forEach(x => {
+        const opt = document.createElement('option');
+        opt.value = x.symbol;
+        opt.textContent = x.symbol;
+        buy.appendChild(opt);
+      });
+
+      if ([...buy.options].some(o => o.value === 'ETH')) {
+        buy.value = 'ETH';
+      }
+
+      document.getElementById('buy-market-info').textContent = `Available EUR markets: ${items.length}`;
+    }
+
+    async function loadHoldings() {
+      const holdings = await fetchJson('/api/trade/holdings');
+      latestHoldings = holdings.holdings || [];
+
+      document.getElementById('stat-total').textContent = euro(
+        latestHoldings.reduce((s, x) => s + Number(x.eur_value || 0), 0)
+      );
+      document.getElementById('stat-locked').textContent = euro(
+        latestHoldings.filter(x => x.locked).reduce((s, x) => s + Number(x.eur_value || 0), 0)
+      );
+      document.getElementById('stat-unlocked').textContent = euro(
+        latestHoldings.filter(x => !x.locked).reduce((s, x) => s + Number(x.eur_value || 0), 0)
+      );
+      document.getElementById('stat-assets').textContent = latestHoldings.length;
+
+      const tbody = document.getElementById('holdings-table');
+      tbody.innerHTML = '';
+
+      latestHoldings.forEach(x => {
+        tbody.innerHTML += `
+          <tr class="${x.locked ? 'locked-row' : ''} ${Number(x.eur_value || 0) === 0 ? 'zero-row' : ''}">
+            <td>${escapeHtml(x.symbol)}</td>
+            <td>${escapeHtml(x.amount)}</td>
+            <td>${escapeHtml(x.eur_price)}</td>
+            <td>${escapeHtml(x.eur_value)}</td>
+            <td>${x.locked ? '<span class="pill locked">LOCKED</span>' : '<span class="pill open">OPEN</span>'}</td>
+            <td>
+              <button onclick="toggleLock('${escapeHtml(x.symbol)}', ${x.locked ? 'false' : 'true'})">
+                ${x.locked ? 'Unlock' : 'Lock'}
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      const sell = document.getElementById('sell-symbol');
+      sell.innerHTML = '';
+      latestHoldings.forEach(x => {
+        const opt = document.createElement('option');
+        opt.value = x.symbol;
+        opt.textContent = x.symbol;
+        sell.appendChild(opt);
+      });
+      if ([...sell.options].some(o => o.value === 'XRP')) {
+        sell.value = 'XRP';
+      }
+    }
+
+    async function loadDashboard() {
+      const dash = await fetchJson('/api/trade/dashboard');
+      latestDashboard = dash;
+
+      document.getElementById('dash-total').textContent = euro(dash.summary.total_wallet_value_eur);
+      document.getElementById('dash-locked').textContent = euro(dash.summary.locked_value_eur);
+      document.getElementById('dash-unlocked').textContent = euro(dash.summary.unlocked_value_eur);
+      document.getElementById('dash-zero-count').textContent = dash.summary.zero_value_asset_count;
+
+      const total = Number(dash.summary.total_wallet_value_eur || 0);
+
+      document.getElementById('dashboard-top-holdings').textContent =
+        (dash.top_holdings || []).map(x => {
+          const pct = total > 0 ? ((Number(x.eur_value || 0) / total) * 100).toFixed(1) : '0.0';
+          return `${x.symbol}: ${euro(x.eur_value)} EUR (${pct}%)`;
+        }).join('\n');
+
+      const errors = (((dash.recent_audit || {}).items) || []).filter(x =>
+        x.status !== 'ok' || String(x.event_type || '').includes('error')
+      );
+
+      document.getElementById('dashboard-errors').textContent =
+        errors.length
+          ? errors.slice(0, 10).map(x => `${x.time}\n${x.error_message || 'unknown error'}`).join('\n\n')
+          : 'No recent errors';
+
+      const success = ((((dash.recent_audit || {}).items) || []).find(x => x.event_type === 'execute_success'));
+      document.getElementById('dashboard-last-success').textContent =
+        success
+          ? `${success.time}\n${String(success.side || '').toUpperCase()} ${success.symbol}\nEUR: ${success.eur_amount}\nFilled: ${success.filled_amount}\nFee: ${success.fee_paid} ${success.fee_currency || ''}`
+          : 'No successful trades yet';
+
+      const bars = document.getElementById('portfolio-bars');
+      const top = dash.top_holdings || [];
+      if (!top.length) {
+        bars.innerHTML = '<div class="muted">No data</div>';
+      } else {
+        bars.innerHTML = top.map(x => {
+          const pct = total > 0 ? ((Number(x.eur_value || 0) / total) * 100) : 0;
+          return `
+            <div class="bar-row">
+              <div>${escapeHtml(x.symbol)}</div>
+              <div class="bar-bg"><div class="bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+              <div>${pct.toFixed(1)}%</div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    async function loadAudit() {
+      const audit = await fetchJson('/api/trade/audit/recent?limit=20');
+      latestAudit = audit;
+
+      const items = audit.items || [];
+      const box = document.getElementById('audit-box');
+
+      if (!items.length) {
+        box.innerHTML = '<div class="muted">No audit events yet.</div>';
+        renderHealthStrip();
+        return;
+      }
+
+      box.innerHTML = items.map(item => {
+        const statusClass = item.status === 'ok' ? 'ok' : 'err';
+        const eventClass = item.event_type && item.event_type.includes('error') ? 'err' : 'warn';
+
+        const feeText = item.fee_paid !== null && item.fee_paid !== undefined
+          ? `${item.fee_paid}${item.fee_currency ? ' ' + item.fee_currency : ''}`
+          : '-';
+
+        const filledText = item.filled_amount !== null && item.filled_amount !== undefined
+          ? item.filled_amount
+          : '-';
+
+        const eurText = item.eur_amount !== null && item.eur_amount !== undefined
+          ? item.eur_amount
+          : '-';
+
+        const amountText = item.asset_amount !== null && item.asset_amount !== undefined
+          ? item.asset_amount
+          : '-';
+
+        return `
+          <div class="audit-item">
+            <div class="audit-top">
+              <span class="pill ${statusClass}">${escapeHtml(item.status || 'unknown')}</span>
+              <span class="pill ${eventClass}">${escapeHtml(item.event_type || 'event')}</span>
+              <span class="pill">${escapeHtml(item.side || '-')}</span>
+              <span class="pill">${escapeHtml(item.symbol || '-')}</span>
+              <span class="audit-time">${escapeHtml(item.time || '')}</span>
+            </div>
+
+            <div class="audit-main">
+              <div class="audit-field"><span class="audit-label">Market</span>${escapeHtml(item.market || '-')}</div>
+              <div class="audit-field"><span class="audit-label">EUR Amount</span>${escapeHtml(eurText)}</div>
+              <div class="audit-field"><span class="audit-label">Asset Amount</span>${escapeHtml(amountText)}</div>
+              <div class="audit-field"><span class="audit-label">Filled Amount</span>${escapeHtml(filledText)}</div>
+              <div class="audit-field"><span class="audit-label">Fee</span>${escapeHtml(feeText)}</div>
+              <div class="audit-field"><span class="audit-label">Preview ID</span>${escapeHtml(item.preview_id || '-')}</div>
+              <div class="audit-field"><span class="audit-label">Order ID</span>${escapeHtml(item.bitvavo_order_id || '-')}</div>
+              <div class="audit-field"><span class="audit-label">Price</span>${escapeHtml(item.preview_price ?? '-')}</div>
+            </div>
+
+            ${item.error_message ? `<div class="audit-error">${escapeHtml(item.error_message)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      renderHealthStrip();
+    }
+
+    async function loadPendingApprovals() {
+      const data = await fetchJson('/ai/approvals/pending');
+      latestPendingApprovals = data;
+      document.getElementById('approval-box').textContent = JSON.stringify(data, null, 2);
+      renderHealthStrip();
+    }
+
+    async function loadRecentPreviews() {
+      const data = await fetchJson('/api/trade/previews?limit=10');
+      latestRecentPreviews = data;
+      document.getElementById('previews-box').textContent = JSON.stringify(data, null, 2);
+      renderHealthStrip();
+    }
+
+    async function loadStrategyConfig() {
+      const data = await fetchJson('/api/trade/strategy/config');
+      latestStrategy = data;
+
+      const cfg = data.config || {};
+
+      document.getElementById('strategy-enabled').value = boolText(cfg.enabled);
+      document.getElementById('strategy-mode').value = cfg.mode || 'manual_only';
+      document.getElementById('strategy-dry-run').value = boolText(cfg.dry_run);
+      document.getElementById('strategy-max-buy').value = cfg.max_buy_eur_per_trade ?? 25;
+      document.getElementById('strategy-max-sell').value = cfg.max_sell_eur_per_trade ?? 50;
+      document.getElementById('strategy-max-positions').value = cfg.max_open_positions ?? 5;
+      document.getElementById('strategy-stop-loss').value = cfg.stop_loss_pct ?? 8;
+      document.getElementById('strategy-take-profit').value = cfg.take_profit_pct ?? 15;
+      document.getElementById('strategy-approval-buys').value = boolText(cfg.require_manual_approval_for_buys);
+      document.getElementById('strategy-approval-sells').value = boolText(cfg.require_manual_approval_for_sells);
+      document.getElementById('strategy-respect-locks').value = boolText(cfg.respect_locked_positions);
+      document.getElementById('strategy-allowed-symbols').value = (cfg.allowed_symbols || []).join(', ');
+      document.getElementById('strategy-blocked-symbols').value = (cfg.blocked_symbols || []).join(', ');
+      document.getElementById('strategy-notes').value = cfg.notes || '';
+
+      document.getElementById('strategy-box').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function saveStrategyConfig() {
+      try {
+        const payload = {
+          enabled: document.getElementById('strategy-enabled').value === 'true',
+          mode: document.getElementById('strategy-mode').value,
+          dry_run: document.getElementById('strategy-dry-run').value === 'true',
+          max_buy_eur_per_trade: Number(document.getElementById('strategy-max-buy').value || 25),
+          max_sell_eur_per_trade: Number(document.getElementById('strategy-max-sell').value || 50),
+          max_open_positions: Number(document.getElementById('strategy-max-positions').value || 5),
+          stop_loss_pct: Number(document.getElementById('strategy-stop-loss').value || 8),
+          take_profit_pct: Number(document.getElementById('strategy-take-profit').value || 15),
+          require_manual_approval_for_buys: document.getElementById('strategy-approval-buys').value === 'true',
+          require_manual_approval_for_sells: document.getElementById('strategy-approval-sells').value === 'true',
+          respect_locked_positions: document.getElementById('strategy-respect-locks').value === 'true',
+          allowed_symbols: csvToArray(document.getElementById('strategy-allowed-symbols').value),
+          blocked_symbols: csvToArray(document.getElementById('strategy-blocked-symbols').value),
+          notes: document.getElementById('strategy-notes').value
+        };
+
+        const data = await fetchJson('/api/trade/strategy/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+
+        latestStrategy = data;
+        document.getElementById('strategy-box').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        document.getElementById('strategy-box').textContent = 'Save failed: ' + err.message;
+      }
+    }
+
+    function renderPreviewBox(data) {
+      const preview = data.preview || {};
+      const lines = [
+        `status: ${data.status || ''}`,
+        `preview_id: ${data.preview_id || ''}`,
+        `side: ${preview.side || ''}`,
+        `market: ${preview.market || ''}`,
+        `estimated_amount: ${preview.estimated_amount || ''}`,
+        `estimated_eur_total: ${preview.estimated_eur_total || ''}`,
+        `current_price: ${preview.current_price || ''}`,
+        `expires_in_seconds: ${data.expires_in_seconds || ''}`
+      ];
+      document.getElementById('preview-box').textContent = lines.join('\n');
+    }
+
+    async function previewBuy() {
+      try {
+        const symbol = document.getElementById('buy-symbol').value;
+        const eurAmount = parseFloat(document.getElementById('buy-eur').value);
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            side: 'buy',
+            symbol: symbol,
+            eur_amount: eurAmount
+          })
+        });
+
+        latestPreview = data;
+        renderPreviewBox(data);
+        await loadRecentPreviews();
+        await loadDashboard();
+        await loadAudit();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Preview buy failed: ' + err.message;
+      }
+    }
+
+    async function previewSell() {
+      try {
+        const symbol = document.getElementById('sell-symbol').value;
+        const amount = parseFloat(document.getElementById('sell-amount').value);
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            side: 'sell',
+            symbol: symbol,
+            amount: amount
+          })
+        });
+
+        latestPreview = data;
+        renderPreviewBox(data);
+        await loadRecentPreviews();
+        await loadDashboard();
+        await loadAudit();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Preview sell failed: ' + err.message;
+      }
+    }
+
+    async function sellAll() {
+      try {
+        const symbol = document.getElementById('sell-symbol').value;
+
+        const data = await fetchJson('/api/trade/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            side: 'sell',
+            symbol: symbol,
+            sell_all: true
+          })
+        });
+
+        latestPreview = data;
+        renderPreviewBox(data);
+        await loadRecentPreviews();
+        await loadDashboard();
+        await loadAudit();
+      } catch (err) {
+        document.getElementById('preview-box').textContent = 'Sell all preview failed: ' + err.message;
+      }
+    }
+
+    async function requestApproval() {
+      try {
+        if (!latestPreview) {
+          throw new Error('No preview available');
+        }
+
+        const previewId = latestPreview.preview_id;
+        if (!previewId) {
+          throw new Error('Preview ID not found');
+        }
+
+        const data = await fetchJson('/api/trade/request-approval', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            preview_id: previewId,
+            requested_by: 'crypto_ui'
+          })
+        });
+
+        document.getElementById('approval-box').textContent = JSON.stringify(data, null, 2);
+        await loadPendingApprovals();
+        await loadAudit();
+      } catch (err) {
+        document.getElementById('approval-box').textContent = 'Request approval failed: ' + err.message;
+      }
+    }
+
+    async function toggleLock(symbol, locked) {
+      await fetchJson('/api/trade/lock', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({symbol, locked})
+      });
+      await loadHoldings();
+      await loadDashboard();
+    }
+
+    async function refreshAll() {
+      try { await loadMarkets(); } catch (err) {}
+      try { await loadHoldings(); } catch (err) {}
+      try { await loadDashboard(); } catch (err) {}
+      try { await loadAudit(); } catch (err) {}
+      try { await loadPendingApprovals(); } catch (err) {}
+      try { await loadRecentPreviews(); } catch (err) {}
+      try { await loadStrategyConfig(); } catch (err) {}
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 5000);
+  </script>
+</body>
+</html>
