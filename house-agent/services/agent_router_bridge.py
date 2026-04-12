@@ -339,6 +339,8 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     if any(x in q for x in [
         "which rooms are occupied",
         "what rooms are occupied",
+        "which rooms are active",
+        "what rooms are active",
         "occupied right now",
         "room occupancy",
         "occupancy",
@@ -346,8 +348,6 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "house sensor",
         "sensor overview",
         "sensor state",
-        "what do the house sensors say",
-        "what do sensors say",
         "room activity",
         "is anyone home",
         "is anyone in the",
@@ -362,11 +362,8 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "what lights are on",
         "active lights",
         "lighting active",
-        "are any lights on",
-        "where is motion",
         "active motion",
-        "motion right now",
-        "is there motion",
+        "where is motion",
         "which rooms have no clear live sensor data",
         "what rooms have no clear live sensor data",
         "which rooms have no live sensor data",
@@ -385,12 +382,19 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "active without presence",
         "which rooms currently have presence detected",
         "what rooms currently have presence detected",
-        "which rooms have presence",
         "where is presence",
         "active presence",
-        "presence active",
-        "which rooms have motion",
-        "what rooms have motion",
+        "which rooms have motion right now",
+        "what rooms have motion right now",
+        "which rooms have lights on right now",
+        "what rooms have lights on right now",
+        "what is happening in the",
+        "what's happening in the",
+        "give me the current state of the",
+        "current state of the",
+        "what sensors are active in the",
+        "what is active in the",
+        "why is the",
     ]):
         return {
             "type": "route",
@@ -401,6 +405,7 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
             },
             "reason": "house_sensor_occupancy_query",
         }
+
 
     history_route = route_history_question(question)
     if history_route and history_route.get("status") == "ok" and history_route.get("target"):
@@ -748,50 +753,53 @@ def _summarize_house_sensors(data: dict, action: dict, question: str = "") -> st
 
     target_room = find_room_from_question()
 
+
+
+
     if target_room and target_room in room_map:
         room = room_map[target_room]
         room_name = room_label(room.get("room"))
         room_status = str(room.get("room_status") or "").strip().lower()
 
+        lighting = room.get("lighting") or {}
+        motion = room.get("motion") or {}
+        presence = room.get("presence") or {}
+        climate = room.get("climate") or {}
+        access_security = room.get("access_security") or {}
+        activity = room.get("activity") or {}
+
+        lights_on = bool(lighting.get("is_on"))
+        motion_on = bool(motion.get("is_active"))
+        presence_on = bool(presence.get("is_active"))
+
+        binary_on_count = int(activity.get("binary_on_count") or 0)
+        telemetry_count = int(activity.get("telemetry_count") or 0)
+
+        temp_actual = climate.get("temperature_actual")
+        temp_target = climate.get("temperature_target")
+        humidity = climate.get("humidity")
+        co2 = climate.get("co2")
+        open_window = climate.get("open_window")
+
+        active_signals = access_security.get("active_signals") or []
+        status_signals = access_security.get("status_signals") or []
+        alert_signals = access_security.get("alert_signals") or []
+
         if "light" in q or "lights" in q or "lighting" in q:
-            if bool(((room.get("lighting") or {}).get("is_on"))):
+            if lights_on:
                 return f"The {room_name} lights are currently on."
             return f"The {room_name} lights are currently off."
 
-        if "motion" in q:
-            if bool(((room.get("motion") or {}).get("is_active"))):
+        if "motion" in q and "what is happening" not in q and "state" not in q:
+            if motion_on:
                 return f"There is currently motion detected in the {room_name}."
             return f"There is no active motion detected in the {room_name}."
 
-        if "presence" in q:
-            if bool(((room.get("presence") or {}).get("is_active"))):
-                return f"Active presence is currently detected in the {room_name}."
-            return f"There is no active presence currently detected in the {room_name}."
-
-        if "idle" in q:
-            if room_status == "idle":
-                return f"The {room_name} currently appears idle."
-            if room_status == "occupied":
-                return f"The {room_name} does not appear idle. It currently appears occupied."
-            if room_status == "active_no_presence":
-                return f"The {room_name} is not idle. It shows recent activity without active presence."
-            return f"The {room_name} currently has no clear sensor state."
-
-        if "without presence" in q or "active without presence" in q:
-            if room_status == "active_no_presence":
-                return f"The {room_name} currently shows activity without active presence."
-            if room_status == "occupied":
-                return f"The {room_name} does not fit that state because active presence is currently detected."
-            if room_status == "idle":
-                return f"The {room_name} currently appears idle, not active without presence."
-            return f"The {room_name} currently has no clear sensor state."
-
         if (
             "occupied" in q
-            or "in the " in q
+            or "presence" in q
             or "is the " in q
-            or "is anyone in" in q
-        ):
+        ) and "what is happening" not in q and "current state" not in q:
             if room_status == "occupied":
                 return f"The {room_name} currently appears occupied."
             if room_status == "active_no_presence":
@@ -799,6 +807,62 @@ def _summarize_house_sensors(data: dict, action: dict, question: str = "") -> st
             if room_status == "idle":
                 return f"The {room_name} currently appears idle."
             return f"The {room_name} currently has no clear sensor state."
+
+        detail_parts = []
+
+        if room_status == "occupied":
+            detail_parts.append(f"The {room_name} currently appears occupied.")
+        elif room_status == "active_no_presence":
+            detail_parts.append(f"The {room_name} shows recent activity, but no active presence right now.")
+        elif room_status == "idle":
+            detail_parts.append(f"The {room_name} currently appears idle.")
+        else:
+            detail_parts.append(f"The {room_name} currently has no clear live sensor state.")
+
+        detail_parts.append(f"Presence is {'active' if presence_on else 'inactive'}.")
+        detail_parts.append(f"Motion is {'active' if motion_on else 'inactive'}.")
+        detail_parts.append(f"Lights are {'on' if lights_on else 'off'}.")
+
+        climate_parts = []
+        if temp_actual is not None:
+            climate_parts.append(f"temperature is {round(float(temp_actual), 1)} degrees")
+        if temp_target is not None:
+            climate_parts.append(f"target is {round(float(temp_target), 1)} degrees")
+        if humidity is not None:
+            climate_parts.append(f"humidity is {round(float(humidity), 1)} percent")
+        if co2 is not None:
+            climate_parts.append(f"CO2 is {round(float(co2), 1)}")
+        if open_window is not None:
+            climate_parts.append(f"window is {'open' if bool(open_window) else 'closed'}")
+
+        if climate_parts:
+            detail_parts.append("Climate: " + ", ".join(climate_parts) + ".")
+
+        signal_names = []
+        for item in active_signals[:5]:
+            name = item.get("control_name")
+            if name:
+                signal_names.append(str(name))
+        for item in status_signals[:5]:
+            name = item.get("control_name")
+            if name and name not in signal_names:
+                signal_names.append(str(name))
+
+        if signal_names:
+            pretty = ", ".join(signal_names[:5]).replace("_", " ")
+            detail_parts.append(f"Relevant access or security activity includes {pretty}.")
+
+        if alert_signals:
+            detail_parts.append(f"There are {len(alert_signals)} alert-related signals in this room.")
+
+        if binary_on_count or telemetry_count:
+            detail_parts.append(
+                f"I also see {binary_on_count} active binary items and {telemetry_count} telemetry items in the current room snapshot."
+            )
+
+        return " ".join(detail_parts)
+
+
 
     if any(x in q for x in [
         "which rooms have no clear live sensor data",
