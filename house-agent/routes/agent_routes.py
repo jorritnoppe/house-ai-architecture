@@ -36,7 +36,11 @@ def _looks_like_safe_action_text(text: str) -> bool:
         "audio",
         "party mode",
         "party music",
-        "party",
+        "speaker",
+        "speakers",
+        "playback",
+        "playlist",
+        "song",
         "scene",
     ]
 
@@ -62,9 +66,12 @@ def _looks_like_safe_action_text(text: str) -> bool:
         "is toilet music on",
         "is party mode on",
         "status of music",
-        "what is active",
-        "what is running",
         "active actions",
+        "which safe actions are active",
+        "which actions are active",
+        "what audio is active",
+        "what music is active",
+        "what playback is active",
     ]
 
     direct_action_phrases = [
@@ -90,7 +97,24 @@ def _looks_like_safe_action_text(text: str) -> bool:
         or _has_words(t, ["put", "off"])
     )
 
+    # Generic room-state questions like:
+    # "what is active in deskroom?"
+    # "why is deskroom active?"
+    # should NOT be routed to safe actions unless they clearly mention audio/music.
+    if "what is active" in t and not has_music:
+        return False
+    if "what is running" in t and not has_music:
+        return False
+    if "why is" in t and "active" in t and not has_music:
+        return False
+    if "what is happening" in t and not has_music:
+        return False
+    if "current state" in t and not has_music:
+        return False
+
     return has_status or ((has_direct_action or has_split_action) and (has_music or has_room))
+
+
 
 
 @agent_bp.post("/agent/query")
@@ -162,7 +186,36 @@ def agent_query():
 
     app.logger.warning("AGENT_QUERY_DEBUG fallback_to_run_agent_query question=%r", question)
     result = run_agent_query(question)
+
+    app.logger.warning("AGENT_QUERY_DEBUG fallback_to_run_agent_query question=%r", question)
+    result = run_agent_query(question)
+
+    debug = bool(payload.get("debug", False))
+
+    if not debug and isinstance(result, dict):
+        compact = {
+            "status": result.get("status", "ok"),
+            "question": question,
+            "mode": result.get("mode"),
+            "answer": result.get("answer"),
+        }
+
+        if "intents" in result:
+            compact["intents"] = result.get("intents")
+
+        if "auth_result" in result:
+            compact["auth_result"] = {
+                "status": result.get("auth_result", {}).get("status"),
+                "allowed": result.get("auth_result", {}).get("allowed"),
+                "auth_level": result.get("auth_result", {}).get("auth_level"),
+                "approval_method": result.get("auth_result", {}).get("approval_method"),
+            }
+
+        return jsonify(compact)
+
     return jsonify(result)
+
+
 
 
 def _speak_via_electricpi(speaker: str, text: str, owner: str = "ai", volume=None):
