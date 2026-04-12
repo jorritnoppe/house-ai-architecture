@@ -4,11 +4,15 @@ from typing import Any, Dict
 
 from extensions import crypto_tools
 from services.netdata_service import get_all_nodes_overview
-from services.power_service import get_power_now_data
 from services.service_health_service import get_services_overview
 from services.unified_playback_state_service import get_unified_playback_state
 from services.voice_node_registry_service import get_voice_node_registry
 from routes.loxone_routes import _ai_fetch_history, _ai_telemetry_latest
+
+from services.power_service import get_power_now_data, get_energy_summary_data
+from services.energy_service import energy_service
+
+
 
 
 def _safe_call(fn, default):
@@ -90,6 +94,10 @@ def _get_latest_telemetry(minutes: int = 120, room: str | None = None, limit: in
 
 def get_house_state() -> Dict[str, Any]:
     power = _safe_call(get_power_now_data, {"status": "error"})
+    energy_summary = _safe_call(get_energy_summary_data, {"status": "error"})
+    energy_snapshot = _safe_call(energy_service.get_live_snapshot, {"status": "error"})
+    energy_flow = _safe_call(energy_service.get_power_flow_summary, {"status": "error"})
+
     telemetry = _safe_call(
         lambda: _get_latest_telemetry(minutes=120),
         {"status": "error"},
@@ -123,9 +131,23 @@ def get_house_state() -> Dict[str, Any]:
     if pb_effective.get("effective_target_room"):
         active_rooms.append(pb_effective["effective_target_room"])
 
+    interpreted_house_load_kw = None
+    interpreted_grid_import_kw = None
+    interpreted_grid_export_kw = None
+    interpreted_solar_power_kw = None
+
+    if isinstance(energy_flow, dict):
+        interpreted_house_load_kw = energy_flow.get("estimated_house_load_kw")
+        interpreted_grid_import_kw = energy_flow.get("grid_import_kw")
+        interpreted_grid_export_kw = energy_flow.get("grid_export_kw")
+        interpreted_solar_power_kw = energy_flow.get("solar_power_kw")
+
     return {
         "status": "ok",
         "power": power,
+        "energy_summary": energy_summary,
+        "energy_snapshot": energy_snapshot,
+        "energy_flow": energy_flow,
         "telemetry": {
             "status": telemetry.get("status"),
             "minutes": telemetry.get("minutes"),
@@ -144,5 +166,9 @@ def get_house_state() -> Dict[str, Any]:
             "active_audio_rooms": active_rooms,
             "voice_nodes_online": ((voice_nodes.get("summary") or {}).get("online") if isinstance(voice_nodes, dict) else None),
             "crypto_total_value": crypto_summary.get("total_value") if isinstance(crypto_summary, dict) else None,
+            "interpreted_house_load_kw": interpreted_house_load_kw,
+            "interpreted_grid_import_kw": interpreted_grid_import_kw,
+            "interpreted_grid_export_kw": interpreted_grid_export_kw,
+            "interpreted_solar_power_kw": interpreted_solar_power_kw,
         },
     }

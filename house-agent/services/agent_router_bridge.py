@@ -539,17 +539,33 @@ def _summarize_house_state(data: dict, action: dict) -> str:
 
 
 
-    if power_watts is not None:
+    interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
+    interpreted_grid_import_kw = summary.get("interpreted_grid_import_kw")
+    interpreted_grid_export_kw = summary.get("interpreted_grid_export_kw")
+    interpreted_solar_power_kw = summary.get("interpreted_solar_power_kw")
+
+    if interpreted_house_load_kw is not None:
+        try:
+            load_kw = round(float(interpreted_house_load_kw), 2)
+            if interpreted_grid_export_kw is not None and float(interpreted_grid_export_kw) > 0.02:
+                parts.append(f"The house is currently using {load_kw} kilowatts, with some solar excess being exported.")
+            elif interpreted_grid_import_kw is not None and float(interpreted_grid_import_kw) > 0.02:
+                parts.append(f"The house is currently using {load_kw} kilowatts and still importing a little grid power.")
+            else:
+                parts.append(f"The house is currently using {load_kw} kilowatts.")
+        except Exception:
+            parts.append("The house energy flow is available.")
+    elif power_watts is not None:
         try:
             kw = round(abs(float(power_watts)) / 1000.0, 2)
-            raw_watts = float(power_watts)
-
-            if raw_watts < 0:
-                parts.append(f"The house is currently exporting {kw} kilowatts.")
+            if float(power_watts) < 0:
+                parts.append(f"The house currently has net export of {kw} kilowatts.")
             else:
                 parts.append(f"The house is currently using {kw} kilowatts.")
         except Exception:
             parts.append(f"Current house power is {power_watts} watts.")
+
+
 
 
 
