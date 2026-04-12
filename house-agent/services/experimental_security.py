@@ -3,8 +3,8 @@ import os
 import time
 from datetime import datetime, timezone
 
-AUDIT_LOG_PATH = "/opt/house-ai/services/experimental_audit.log"
-COOLDOWN_STATE_PATH = "/opt/house-ai/services/experimental_cooldowns.json"
+AUDIT_LOG_PATH = "/home/jnoppe/house-agent/services/experimental_audit.log"
+COOLDOWN_STATE_PATH = "/home/jnoppe/house-agent/services/experimental_cooldowns.json"
 
 
 def utc_now_iso():

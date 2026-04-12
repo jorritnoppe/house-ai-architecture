@@ -25,7 +25,7 @@ def ai_service_health():
 
 @service_health_bp.route("/ai/service/summary", methods=["GET"])
 def ai_service_summary():
-    node = request.args.get("node", "house-ai-server")
+    node = request.args.get("node", "ai-server")
     try:
         return jsonify({
             "status": "ok",

@@ -12,7 +12,7 @@ TOOL_SPEC = {
         "properties": {
             "target": {
                 "type": "string",
-                "description": "Private target network or host, for example 10.0.0.0/24"
+                "description": "Private target network or host, for example 192.168.9.0/24"
             }
         },
         "required": []
@@ -65,7 +65,7 @@ def _parse_nmap_ping_sweep(output: str):
 
 def run(args):
     args = args or {}
-    target = str(args.get("target") or "10.0.0.0/24").strip()
+    target = str(args.get("target") or "192.168.9.0/24").strip()
 
     if not _is_private_target(target):
         return {

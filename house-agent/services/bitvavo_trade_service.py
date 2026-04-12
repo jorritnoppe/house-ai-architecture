@@ -5,7 +5,8 @@ from typing import Any, Dict
 
 import requests
 
-BITVAVO_BRIDGE_BASE_URL = os.getenv("BITVAVO_BRIDGE_BASE_URL", "http://bitvavo-bridge.local:5001").rstrip("/")
+
+BITVAVO_BRIDGE_BASE_URL = os.getenv("BITVAVO_BRIDGE_BASE_URL", "http://192.168.1.185:5001").rstrip("/")
 BITVAVO_BRIDGE_SHARED_SECRET = os.getenv("BITVAVO_BRIDGE_SHARED_SECRET", "")
 
 

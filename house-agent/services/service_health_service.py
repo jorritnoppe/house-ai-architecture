@@ -124,4 +124,4 @@ def get_services_overview() -> Dict:
 
 
 def get_local_service_health() -> Dict:
-    return get_service_health_for_node("house-ai-server")
+    return get_service_health_for_node("ai-server")

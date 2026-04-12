@@ -10,7 +10,7 @@ from services.audio_test_pattern import save_test_pattern
 from services.audio_pattern_analysis import detect_beep_regions
 from services.voice_service import play_url_on_player
 
-DISCOVER_PI_BASE = "http://feedback-node.local:8091"
+DISCOVER_PI_BASE = "http://192.168.9.198:8091"
 
 
 def _download_probe_file(probe_name: str) -> str:
@@ -135,7 +135,7 @@ def run_timing_test(
             "pattern": pattern,
         }
 
-    url = f"http://house-ai.local:8010/{pattern['filename']}"
+    url = f"http://192.168.9.182:8010/{pattern['filename']}"
     arm_result = _start_timing_capture(
         session_id=session_id,
         seconds=probe_seconds_back,

@@ -1,25 +1,25 @@
 {
   "clients": {
     "c8:7f:54:65:d6:7c": {
-      "name": "house-ai-server",
+      "name": "ai-server",
       "role": "ai_server",
       "room": "masterbedroom",
       "critical": true
     },
     "2c:cf:67:4f:7c:24": {
-      "name": "voice-node-1",
+      "name": "DeskPi",
       "role": "house_sensor",
       "room": "deskroom",
       "critical": true
     },
     "d8:3a:dd:b4:7a:93": {
-      "name": "audio-node-1",
+      "name": "ElectricPi",
       "role": "house_sensor",
       "room": "storageroom",
       "critical": true
     },
     "c8:60:00:8e:b1:36": {
-      "name": "nas-node",
+      "name": "TrueNAS",
       "role": "storage",
       "room": "storageroom",
       "critical": true
@@ -67,7 +67,7 @@
       "critical": false
     },
     "d8:3a:dd:0d:29:6e": {
-      "name": "utility-node-1",
+      "name": "AttackPi",
       "role": "house_sensor",
       "room": "attickroom",
       "critical": false
@@ -154,7 +154,7 @@
     },
     "00:a0:98:1a:e8:0b": {
       "name": "kali",
-      "role": "VM_nas-node",
+      "role": "VM_truenas",
       "room": "storageroom",
       "critical": false
     },

@@ -85,6 +85,7 @@ These files are important operational artifacts and should be treated as enforce
 ---
 
 ## 5. Snapshot Files
+The `_snapshots/` folder contains historical captures such as:
 - file lists
 - project trees
 

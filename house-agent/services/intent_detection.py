@@ -452,7 +452,7 @@ def enrich_intents(question: str, intents: list[str], tool_data: dict):
         intents = [i for i in intents if i != "pdata_energy_summary"]
         tool_data.pop("pdata_energy_summary", None)
 
-    node_names = ["house-ai-server", "voice-node-1", "audio-node-1", "aux-node-1", "feedback-node"]
+    node_names = ["ai-server", "deskpi", "electricpi", "luifelpi", "discoverpi"]
 
     matched_node = None
     for node_name in node_names:

@@ -9,7 +9,7 @@ import requests
 
 from services.stt_service import transcribe_wav
 
-FEEDBACK_PROBE_BASE = "http://feedback-node.local:8091"
+FEEDBACK_PROBE_BASE = "http://192.168.9.198:8091"
 
 
 def update_probe_metadata(path: str, patch: dict) -> dict:

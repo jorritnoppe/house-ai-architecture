@@ -20,7 +20,7 @@ from services.voice_service import say_text
 
 voice_input_bp = Blueprint("voice_input", __name__)
 
-VOICE_UPLOAD_DIR = Path("/opt/house-ai/data/voice_uploads")
+VOICE_UPLOAD_DIR = Path("/home/jnoppe/house-agent/data/voice_uploads")
 VOICE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".wav"}

@@ -8,7 +8,7 @@ from services.proposed_tool_service import (
 )
 
 
-EXPERIMENTAL_TOOLS_DIR = "/opt/house-ai/experimental_tools"
+EXPERIMENTAL_TOOLS_DIR = "/home/jnoppe/house-agent/experimental_tools"
 
 
 def _safe_filename(filename: str) -> str:

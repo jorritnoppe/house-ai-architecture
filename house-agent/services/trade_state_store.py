@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 
 TRADE_STATE_DB_PATH = os.getenv(
     "TRADE_STATE_DB_PATH",
-    "/opt/house-ai/data/trade_state.db",
+    "/home/jnoppe/house-agent/data/trade_state.db",
 )
 
 

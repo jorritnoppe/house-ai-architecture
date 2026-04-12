@@ -28,28 +28,62 @@ SAFE_ROUTES = {
     "/voice/files/<path:filename>",
     "/ai/audio_resolve_control",
     "/ai/audio_tool_targets",
+
+    "/ai/power_now",
+    "/ai/energy_summary",
+    "/ai/energy_today",
+    "/ai/phase_overview",
+
+    "/ai/unified_energy_summary",
+    "/ai/unified_energy_snapshot",
+
     "/ai/pdata_all_fields",
     "/ai/pdata_compare_energy",
     "/ai/pdata_energy_summary",
     "/ai/pdata_full_overview",
     "/ai/pdata_gas_summary",
-    "/ai/energy_summary",
-    "/ai/energy_today",
-    "/ai/phase_overview",
-    "/ai/unified_energy_summary",
-    "/ai/unified_energy_snapshot",
-    "/ai/power_now",
+
+    "/ai/sma_summary",
+    "/ai/sma_production_overview",
+
     "/ai/cheapest_hours_today",
     "/ai/electricity_cost_last_24h",
     "/ai/electricity_cost_today",
     "/ai/electricity_price_now",
-    "/ai/sma_production_overview",
-    "/ai/sma_summary",
+
     "/ai/salt_tank_level",
     "/ai/water_softener_overview",
     "/ai/water_temperatures",
+
+    "/ai/house_state",
+    "/ai/house_briefing_now",
+    "/ai/house_briefing_today",
+    "/ai/house_facts_now",
+    "/ai/house_facts_today",
+    "/ai/loxone_history_room_activity_ai",
+    "/ai/loxone_history_telemetry_latest",
+
+
+    "/ai/playback_state",
+
+    "/ai/nodes/health",
+    "/ai/nodes/overview",
+    "/ai/node/summary",
+    "/ai/node/alerts",
+
+    "/ai/service/health",
+    "/ai/service/summary",
+    "/ai/services/overview",
+
+    "/ai/loxone_history_presence_ai",
+    "/ai/loxone_history_telemetry_latest",
+    "/ai/loxone_history_room_activity_ai",
+
+    "/nodes/status",
     "/v1/models",
 }
+
+
 
 REVIEW_ROUTES = {
     "/ai/loxone_audio_action_map",

@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 
-STATE_FILE = Path("/opt/house-ai/data/announcement_state.json")
+STATE_FILE = Path("/home/jnoppe/house-agent/data/announcement_state.json")
 STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 

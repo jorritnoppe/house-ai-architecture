@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-LOG_FILE = Path("/opt/house-ai/data/announcement_log.jsonl")
+LOG_FILE = Path("/home/jnoppe/house-agent/data/announcement_log.jsonl")
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 

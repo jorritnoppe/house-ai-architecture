@@ -17,6 +17,10 @@ from services.water_service import get_water_softener_overview
 from services.apc_service import get_apc_summary_data
 from services.loxone_history_service import get_recent_loxone_history
 from services.influx_source_map import INFLUX_SOURCE_MAP
+from services.house_state_service import get_house_state
+from services.house_summary_policy import build_house_summary_facts, rank_house_summary_facts
+
+
 
 
 IGNORED_LOXONE_ROOMS = {"Not Assigned", "unknown", ""}
@@ -153,10 +157,10 @@ def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
     grid_import_kw = energy_flow.get("grid_import_kw")
     grid_export_kw = energy_flow.get("grid_export_kw")
 
-    if house_load_kw is not None:
-        lines.append(f"The house is currently using {round(float(house_load_kw), 2)} kilowatts.")
-
     if mode == "today":
+        if house_load_kw is not None:
+            lines.append(f"The house is currently using {round(float(house_load_kw), 2)} kilowatts.")
+
         energy_today = facts.get("energy_today") or {}
         import_kwh_today = energy_today.get("import_kwh_today")
         export_kwh_today = energy_today.get("export_kwh_today")
@@ -184,13 +188,8 @@ def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
         if price_value is not None:
             lines.append(f"The current electricity price is {round(float(price_value), 3)} euro per kilowatt hour.")
 
-        if solar_power_kw is not None:
-            lines.append(f"Solar power is currently {round(float(solar_power_kw), 2)} kilowatts.")
-
-        if grid_export_kw is not None and float(grid_export_kw) > 0:
-            lines.append(f"The house is currently exporting {round(float(grid_export_kw), 2)} kilowatts to the grid.")
-        elif grid_import_kw is not None:
-            lines.append(f"The house is currently importing {round(float(grid_import_kw), 2)} kilowatts from the grid.")
+        # Real-time house load / solar / grid flow are now handled by the shared
+        # canonical house-state summary, so we intentionally do not repeat them here.
 
     water_softener = facts.get("water_softener") or {}
     flow = water_softener.get("flow") or {}
@@ -227,6 +226,9 @@ def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
         lines.append("House summary is available, but there is not enough data yet for a detailed briefing.")
 
     return lines
+
+
+
 
 
 def get_house_facts_now() -> Dict[str, object]:
@@ -309,10 +311,49 @@ def get_house_facts_today() -> Dict[str, object]:
         "alerts": alerts,
     }
 
+def _build_house_state_brief_lines() -> list[str]:
+    try:
+        house_state = get_house_state()
+        if not isinstance(house_state, dict) or house_state.get("status") != "ok":
+            return []
+
+        facts = build_house_summary_facts(house_state, mode="briefing")
+        facts = rank_house_summary_facts(facts, mode="briefing")
+
+        lines = []
+        seen = set()
+
+        for fact in facts:
+            message = (fact.get("message") or "").strip()
+            if not message:
+                continue
+            if message in seen:
+                continue
+            seen.add(message)
+            lines.append(message)
+
+        return lines
+    except Exception:
+        return []
+
+
 
 def get_house_briefing_now() -> Dict[str, object]:
     facts = get_house_facts_now()
-    lines = _build_brief_lines(facts, mode="now")
+    shared_lines = _build_house_state_brief_lines()
+    legacy_lines = _build_brief_lines(facts, mode="now")
+
+    lines = []
+    seen = set()
+
+    for line in shared_lines + legacy_lines:
+        text = (line or "").strip()
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        lines.append(text)
 
     return {
         "status": "ok",

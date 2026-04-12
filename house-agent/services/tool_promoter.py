@@ -4,9 +4,9 @@ import shutil
 from services.proposed_tool_service import mark_proposed_tool_installed, read_proposed_tool
 
 
-EXPERIMENTAL_TOOLS_DIR = "/opt/house-ai/experimental_tools"
-PRODUCTION_TOOLS_DIR = "/opt/house-ai/tools"
-BACKUP_DIR = "/opt/house-ai/backups/tool_promotions"
+EXPERIMENTAL_TOOLS_DIR = "/home/jnoppe/house-agent/experimental_tools"
+PRODUCTION_TOOLS_DIR = "/home/jnoppe/house-agent/tools"
+BACKUP_DIR = "/home/jnoppe/house-agent/backups/tool_promotions"
 
 
 def _ensure_dirs():

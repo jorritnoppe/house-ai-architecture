@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 
 
-PROPOSED_TOOLS_FILE = "/opt/house-ai/data/proposed_tools.json"
+PROPOSED_TOOLS_FILE = "/home/jnoppe/house-agent/data/proposed_tools.json"
 
 
 def _utc_now_iso():

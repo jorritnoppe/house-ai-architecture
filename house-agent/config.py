@@ -5,7 +5,7 @@ load_dotenv()
 EXPERIMENTAL_APPROVAL_PASSWORD_HASH = os.getenv("EXPERIMENTAL_APPROVAL_PASSWORD_HASH", "")
 
 
-INFLUX_URL = os.getenv("INFLUX_URL", "http://influx.local:8086")
+INFLUX_URL = os.getenv("INFLUX_URL", "http://192.168.9.25:8086")
 INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "CHANGE_ME")
 INFLUX_ORG = os.getenv("INFLUX_ORG", "home")
 INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "eastron630")
@@ -55,7 +55,7 @@ POWER_FIELDS_DEFAULT = [
     "total_var",
 ]
 
-LOXONE_HOST = os.getenv("LOXONE_HOST", "loxone.local")
+LOXONE_HOST = os.getenv("LOXONE_HOST", "192.168.1.88")
 LOXONE_USER = os.getenv("LOXONE_USER", "aiuser")
 LOXONE_PASSWORD = os.getenv("LOXONE_PASSWORD", "")
 

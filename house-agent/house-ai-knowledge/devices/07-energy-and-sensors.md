@@ -9,7 +9,7 @@
 ## SMA inverter
 - routes/sma_routes.py
 - services/sma_service.py
-- sma_ai.py
+- services/sma_tools_core.py
 
 ## Water / salt
 - routes/water_routes.py
@@ -22,11 +22,11 @@
 ## Pdata
 - routes/pdata_routes.py
 - services/pdata_service.py
-- Pdata.py
+- services/pdata_tools_core.py
 
 ## Buderus
 - services/buderus_service.py
-- buderus_module.py
+- services/buderus_legacy_core.py
 
 ## TODO
 - Add field names and units from Influx

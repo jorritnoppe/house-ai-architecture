@@ -11,7 +11,7 @@ import requests
 
 ELECTRICPI_LOXONE_BRIDGE_URL = os.getenv(
     "ELECTRICPI_LOXONE_BRIDGE_URL",
-    "http://audio-node.local:8877"
+    "http://192.168.1.15:8877"
 ).rstrip("/")
 
 
@@ -165,7 +165,7 @@ def agent_query():
     return jsonify(result)
 
 
-def _speak_via_audio-node-1(speaker: str, text: str, owner: str = "ai", volume=None):
+def _speak_via_electricpi(speaker: str, text: str, owner: str = "ai", volume=None):
     text = (text or "").strip()
     if not text:
         raise ValueError("missing 'text'")
@@ -201,7 +201,7 @@ def house_speak_living():
         }), 400
 
     try:
-        result = _speak_via_audio-node-1(
+        result = _speak_via_electricpi(
             speaker="living",
             text=text,
             owner=owner,
@@ -233,7 +233,7 @@ def house_speak_wc():
         }), 400
 
     try:
-        result = _speak_via_audio-node-1(
+        result = _speak_via_electricpi(
             speaker="wc",
             text=text,
             owner=owner,

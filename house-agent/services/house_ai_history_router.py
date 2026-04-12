@@ -95,39 +95,115 @@ def route_history_question(question: str) -> dict[str, Any]:
     room = detect_room(question)
     minutes = detect_minutes(question, default_value=60)
 
+    # Hard exclusions:
+    # do not let generic house-wide overview/energy questions fall into history routing
+    if _contains_any(text, [
+        "house overview",
+        "house status",
+        "house summary",
+        "give me a house overview",
+        "full house overview",
+        "current house overview",
+        "energy overview",
+        "power overview",
+        "solar overview",
+        "grid overview",
+    ]):
+        return {
+            "status": "no_match",
+            "tool": None,
+            "target": None,
+            "params": {},
+            "reason": "house_overview_should_not_use_history_router",
+        }
+
+    if _contains_any(text, [
+        "house power now",
+        "power now",
+        "current power",
+        "house load",
+        "current house load",
+        "house usage",
+        "current house usage",
+        "solar production",
+        "how much solar",
+        "grid import",
+        "grid export",
+        "importing from the grid",
+        "exporting to the grid",
+        "energy flow",
+        "power flow",
+    ]):
+        return {
+            "status": "no_match",
+            "tool": None,
+            "target": None,
+            "params": {},
+            "reason": "energy_question_should_not_use_history_router",
+        }
+
     wants_presence = _contains_any(text, [
-        "motion", "movement", "presence", "occupied", "occupancy",
-        "someone there", "anyone there", "detected"
+        "motion",
+        "movement",
+        "presence",
+        "occupied",
+        "occupancy",
+        "someone there",
+        "anyone there",
+        "detected",
     ])
 
     wants_binary_active = _contains_any(text, [
-        "currently on", "what is on", "what's on", "currently active",
-        "active now", "on right now", "currently enabled"
+        "currently on",
+        "what is on",
+        "what's on",
+        "currently active",
+        "active now",
+        "on right now",
+        "currently enabled",
     ])
 
     wants_binary_changes = _contains_any(text, [
-        "what changed", "changed", "last changed", "recent changes",
-        "triggered", "turned on", "turned off", "switched"
+        "what changed",
+        "changed",
+        "last changed",
+        "recent changes",
+        "triggered",
+        "turned on",
+        "turned off",
+        "switched",
     ])
 
     wants_telemetry = _contains_any(text, [
-        "temperature", "humidity", "climate", "telemetry",
-        "latest temperature", "latest humidity", "latest climate",
-        "water", "gas", "price"
+        "temperature",
+        "humidity",
+        "climate",
+        "telemetry",
+        "latest temperature",
+        "latest humidity",
+        "latest climate",
+        "climate history",
+        "temperature history",
+        "humidity history",
     ])
 
-
-
-
     wants_room_summary = _contains_any(text, [
-        "room summary", "room activity", "per room", "which rooms",
-        "house overview", "overview", "which rooms had activity",
-        "rooms had activity", "activity by room"
+        "room summary",
+        "room activity",
+        "activity by room",
+        "which rooms had activity",
+        "rooms had activity",
+        "recent room activity",
+        "recent activity by room",
+        "per room activity",
     ])
 
     wants_last_change = _contains_any(text, [
-        "last change", "latest change", "most recent change",
-        "when did", "when was"
+        "last change",
+        "latest change",
+        "most recent change",
+        "when did",
+        "when was",
     ])
 
     if wants_room_summary:

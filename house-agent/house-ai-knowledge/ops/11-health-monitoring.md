@@ -7,7 +7,7 @@
 - routes/status.py
 - services/status_service.py
 - services/monitor_ups_voice.py
-- apc_ai.py
+- services/apc_legacy_core.py
 - services/apc_service.py
 
 ## Current monitoring themes

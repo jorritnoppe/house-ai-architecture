@@ -19,11 +19,11 @@ agenda_bp = Blueprint("agenda", __name__)
 
 CALENDAR_CREDENTIALS_FILE = os.environ.get(
     "GOOGLE_CALENDAR_CREDENTIALS_FILE",
-    "/opt/house-ai/secrets/google_calendar_credentials.json",
+    "/home/jnoppe/house-agent/secrets/google_calendar_credentials.json",
 )
 CALENDAR_TOKEN_FILE = os.environ.get(
     "GOOGLE_CALENDAR_TOKEN_FILE",
-    "/opt/house-ai/secrets/google_calendar_token.json",
+    "/home/jnoppe/house-agent/secrets/google_calendar_token.json",
 )
 
 service = GoogleCalendarService(
