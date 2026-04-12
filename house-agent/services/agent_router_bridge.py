@@ -321,7 +321,6 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     ]):
         return {"type": "route", "target": "/ai/power_now"}
 
-
     if any(x in q for x in [
         "excess electricity",
         "excess energy",
@@ -337,12 +336,9 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     ]):
         return {"type": "route", "target": "/ai/unified_energy_summary"}
 
-
     if any(x in q for x in [
         "which rooms are occupied",
         "what rooms are occupied",
-        "which rooms are active",
-        "what rooms are active",
         "occupied right now",
         "room occupancy",
         "occupancy",
@@ -350,6 +346,8 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "house sensor",
         "sensor overview",
         "sensor state",
+        "what do the house sensors say",
+        "what do sensors say",
         "room activity",
         "is anyone home",
         "is anyone in the",
@@ -364,8 +362,35 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "what lights are on",
         "active lights",
         "lighting active",
-        "active motion",
+        "are any lights on",
         "where is motion",
+        "active motion",
+        "motion right now",
+        "is there motion",
+        "which rooms have no clear live sensor data",
+        "what rooms have no clear live sensor data",
+        "which rooms have no live sensor data",
+        "what rooms have no live sensor data",
+        "which rooms have no sensor data",
+        "what rooms have no sensor data",
+        "unknown sensor rooms",
+        "rooms with unknown sensor state",
+        "rooms with no clear live data",
+        "which rooms are idle",
+        "what rooms are idle",
+        "idle rooms",
+        "which rooms show activity without presence",
+        "what rooms show activity without presence",
+        "activity without presence",
+        "active without presence",
+        "which rooms currently have presence detected",
+        "what rooms currently have presence detected",
+        "which rooms have presence",
+        "where is presence",
+        "active presence",
+        "presence active",
+        "which rooms have motion",
+        "what rooms have motion",
     ]):
         return {
             "type": "route",
@@ -376,7 +401,6 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
             },
             "reason": "house_sensor_occupancy_query",
         }
-
 
     history_route = route_history_question(question)
     if history_route and history_route.get("status") == "ok" and history_route.get("target"):
@@ -404,7 +428,6 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "current house usage", "current house load", "solar vs grid",
     ]):
         return {"type": "route", "target": "/ai/unified_energy_summary"}
-
 
     if any(x in q for x in [
         "cheapest hours", "cheap electricity", "best hours to use power",
@@ -474,7 +497,6 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
             "params": {"summary_mode": "overview"},
         }
 
-
     if any(x in q for x in [
         "playback state", "audio state", "voice playback state",
         "is audio playing", "is the house speaking",
@@ -510,30 +532,45 @@ def _fmt(value, unit=""):
         return str(value)
 
 def _human_room_label(name: str) -> str:
-    raw = str(name or "").strip()
-    if not raw:
+    if not name:
         return "unknown room"
 
-    aliases = {
-        "masterbedroom": "master bedroom",
-        "deskroom": "desk room",
-        "entranceroom": "entrance room",
-        "livingroom": "living room",
-        "childroom": "child room",
-        "bathroom": "bathroom",
+    normalized = str(name).strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+
+    explicit = {
         "attickroom": "attic room",
-        "iotroom": "iot room",
+        "atticroom": "attic room",
+        "bathroom": "bathroom",
+        "bedroom": "bedroom",
+        "masterbedroom": "master bedroom",
+        "childroom": "child room",
+        "deskroom": "desk room",
+        "livingroom": "living room",
+        "diningroom": "dining room",
+        "entranceroom": "entrance room",
         "hallwayroom": "hallway",
-        "storageroom": "storage room",
         "kitchenroom": "kitchen",
-        "wcroom": "WC",
+        "storageroom": "storage room",
         "powerroom": "power room",
+        "gardenroom": "garden room",
         "terrasroom": "terrace",
+        "wcroom": "WC",
+        "toiletroom": "toilet",
+        "iotroom": "IoT room",
+        "trapboven": "upstairs stairs",
         "trapbeneden": "downstairs stairs",
-        "not assigned": "not assigned",
-        "unknown": "unknown",
     }
-    return aliases.get(raw.lower(), raw.replace("_", " "))
+
+    if normalized in explicit:
+        return explicit[normalized]
+
+    cleaned = str(name).strip().replace("_", " ").replace("-", " ")
+    if cleaned.lower().endswith("room"):
+        cleaned = cleaned[:-4].strip() + " room"
+
+    return " ".join(cleaned.split())
+
+
 
 
 def _is_noise_room(name: str) -> bool:
@@ -628,112 +665,291 @@ def _summarize_house_state(data: dict, action: dict) -> str:
 
 
 def _summarize_house_sensors(data: dict, action: dict, question: str = "") -> str:
-    if not isinstance(data, dict) or data.get("status") != "ok":
-        return "I could not read the current house sensor state."
-
-    summary = data.get("summary") or {}
-    rooms = data.get("rooms") or []
-
-    occupied_rooms = summary.get("occupied_rooms") or summary.get("presence_active_rooms") or []
-    lighting_active_rooms = summary.get("lighting_active_rooms") or []
-    motion_active_rooms = summary.get("motion_active_rooms") or []
-
+    rooms = data.get("rooms", []) or []
     q = str(question or "").strip().lower()
 
-    def _find_room_entry(question_text: str):
-        for item in rooms:
-            room_name = str(item.get("room") or "").strip()
-            if not room_name:
-                continue
+    def room_label(name: str) -> str:
+        return _human_room_label(name or "")
 
-            human = _human_room_label(room_name).lower()
-            variants = {
-                room_name.lower(),
-                human,
-                human.replace(" room", ""),
-                room_name.lower().replace("room", ""),
-            }
+    occupied_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if str(r.get("room_status") or "").strip().lower() == "occupied"
+    ]
 
-            if any(v and v in question_text for v in variants):
-                return item
+    active_no_presence_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if str(r.get("room_status") or "").strip().lower() == "active_no_presence"
+    ]
+
+    idle_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if str(r.get("room_status") or "").strip().lower() == "idle"
+    ]
+
+    unknown_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if str(r.get("room_status") or "").strip().lower() == "unknown"
+    ]
+
+    lighting_active_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if bool(((r.get("lighting") or {}).get("is_on")))
+    ]
+
+    motion_active_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if bool(((r.get("motion") or {}).get("is_active")))
+    ]
+
+    presence_active_rooms = [
+        room_label(r.get("room"))
+        for r in rooms
+        if bool(((r.get("presence") or {}).get("is_active")))
+    ]
+
+    room_map = {
+        str((r.get("room") or "")).strip().lower(): r
+        for r in rooms
+        if str((r.get("room") or "")).strip()
+    }
+
+    def find_room_from_question() -> str | None:
+        aliases = {
+            "livingroom": ["living room", "livingroom"],
+            "deskroom": ["desk room", "deskroom"],
+            "bathroom": ["bathroom"],
+            "entranceroom": ["entrance room", "entranceroom", "entrance"],
+            "masterbedroom": ["master bedroom", "masterbedroom"],
+            "childroom": ["child room", "childroom"],
+            "attickroom": ["attic room", "attickroom", "attic"],
+            "hallwayroom": ["hallway", "hallway room", "hallwayroom"],
+            "kitchenroom": ["kitchen", "kitchenroom"],
+            "wcroom": ["wc", "toilet", "wc room", "wcroom"],
+            "storageroom": ["storage room", "storageroom", "storage"],
+            "diningroom": ["dining room", "diningroom"],
+            "gardenroom": ["garden room", "gardenroom"],
+            "powerroom": ["power room", "powerroom"],
+            "terrasroom": ["terrace", "terras", "terrasroom"],
+            "trapbeneden": ["downstairs stairs", "trapbeneden"],
+            "trapboven": ["upstairs stairs", "trapboven"],
+            "iotroom": ["iot room", "iotroom"],
+        }
+
+        for canonical, names in aliases.items():
+            if any(name in q for name in names):
+                return canonical
         return None
 
-    def _join_room_labels(items):
-        return _join_natural([_human_room_label(x) for x in items if x])
+    target_room = find_room_from_question()
 
-    room_entry = _find_room_entry(q)
+    if target_room and target_room in room_map:
+        room = room_map[target_room]
+        room_name = room_label(room.get("room"))
+        room_status = str(room.get("room_status") or "").strip().lower()
 
-    if room_entry:
-        room_label = _human_room_label(room_entry.get("room"))
-        room_status = room_entry.get("room_status") or "unknown"
-        lighting = room_entry.get("lighting") or {}
-        climate = room_entry.get("climate") or {}
+        if "light" in q or "lights" in q or "lighting" in q:
+            if bool(((room.get("lighting") or {}).get("is_on"))):
+                return f"The {room_name} lights are currently on."
+            return f"The {room_name} lights are currently off."
 
-        if "occupied" in q or "presence" in q or "anyone in" in q:
-            if room_status == "occupied":
-                return f"The {room_label} currently appears occupied."
+        if "motion" in q:
+            if bool(((room.get("motion") or {}).get("is_active"))):
+                return f"There is currently motion detected in the {room_name}."
+            return f"There is no active motion detected in the {room_name}."
+
+        if "presence" in q:
+            if bool(((room.get("presence") or {}).get("is_active"))):
+                return f"Active presence is currently detected in the {room_name}."
+            return f"There is no active presence currently detected in the {room_name}."
+
+        if "idle" in q:
             if room_status == "idle":
-                return f"The {room_label} currently appears idle."
+                return f"The {room_name} currently appears idle."
+            if room_status == "occupied":
+                return f"The {room_name} does not appear idle. It currently appears occupied."
             if room_status == "active_no_presence":
-                return f"The {room_label} shows some activity, but no active presence right now."
-            return f"I do not have a strong occupancy signal for the {room_label} right now."
+                return f"The {room_name} is not idle. It shows recent activity without active presence."
+            return f"The {room_name} currently has no clear sensor state."
 
-        if "light" in q or "lighting" in q:
-            if lighting.get("is_on"):
-                return f"Lights currently appear active in the {room_label}."
-            return f"I do not currently see active lighting in the {room_label}."
+        if "without presence" in q or "active without presence" in q:
+            if room_status == "active_no_presence":
+                return f"The {room_name} currently shows activity without active presence."
+            if room_status == "occupied":
+                return f"The {room_name} does not fit that state because active presence is currently detected."
+            if room_status == "idle":
+                return f"The {room_name} currently appears idle, not active without presence."
+            return f"The {room_name} currently has no clear sensor state."
 
-        if "temperature" in q or "climate" in q:
-            temp = climate.get("temperature_actual")
-            humidity = climate.get("humidity")
-            if temp is not None and humidity is not None:
-                return f"The {room_label} is about {temp:.1f} degrees with {humidity:.1f} percent humidity."
-            if temp is not None:
-                return f"The {room_label} is about {temp:.1f} degrees right now."
-            return f"I do not have climate data for the {room_label} right now."
+        if (
+            "occupied" in q
+            or "in the " in q
+            or "is the " in q
+            or "is anyone in" in q
+        ):
+            if room_status == "occupied":
+                return f"The {room_name} currently appears occupied."
+            if room_status == "active_no_presence":
+                return f"The {room_name} has some recent activity, but no active presence right now."
+            if room_status == "idle":
+                return f"The {room_name} currently appears idle."
+            return f"The {room_name} currently has no clear sensor state."
 
-    if "light" in q or "lighting" in q:
+    if any(x in q for x in [
+        "which rooms have no clear live sensor data",
+        "what rooms have no clear live sensor data",
+        "which rooms have no live sensor data",
+        "what rooms have no live sensor data",
+        "which rooms have no sensor data",
+        "what rooms have no sensor data",
+        "unknown sensor rooms",
+        "rooms with unknown sensor state",
+        "rooms with no clear live data",
+    ]):
+        if unknown_rooms:
+            return f"Rooms with no clear live sensor data right now are {_join_natural(unknown_rooms)}."
+        return "All monitored rooms currently appear to have some live sensor data."
+
+    if any(x in q for x in [
+        "which rooms are idle",
+        "what rooms are idle",
+        "idle rooms",
+    ]):
+        if idle_rooms:
+            return f"Idle rooms right now are {_join_natural(idle_rooms)}."
+        return "I do not currently see any idle rooms."
+
+    if any(x in q for x in [
+        "which rooms show activity without presence",
+        "what rooms show activity without presence",
+        "activity without presence",
+        "active without presence",
+    ]):
+        if active_no_presence_rooms:
+            return f"Rooms showing activity without active presence right now are {_join_natural(active_no_presence_rooms)}."
+        return "I do not currently see any rooms with activity without active presence."
+
+    if any(x in q for x in [
+        "which rooms currently have presence detected",
+        "what rooms currently have presence detected",
+        "which rooms have presence",
+        "where is presence",
+        "active presence",
+        "presence active",
+    ]):
+        if presence_active_rooms:
+            return f"Active presence is currently detected in {_join_natural(presence_active_rooms)}."
+        return "I do not currently see any active presence."
+
+    if any(x in q for x in [
+        "which rooms are occupied",
+        "what rooms are occupied",
+        "occupied right now",
+        "occupancy",
+        "who is where",
+    ]):
+        if occupied_rooms:
+            return f"Occupied rooms right now are {_join_natural(occupied_rooms)}."
+        return "I do not currently see any occupied rooms."
+
+    if any(x in q for x in [
+        "lights on",
+        "which lights are on",
+        "what lights are on",
+        "active lights",
+        "lighting active",
+        "are any lights on",
+        "which rooms have lights on right now",
+    ]):
         if lighting_active_rooms:
-            return f"Lights appear active in {_join_room_labels(lighting_active_rooms)}."
+            return f"Lights are currently on in {_join_natural(lighting_active_rooms)}."
         return "I do not currently see any active lights."
 
-    if "motion" in q:
+    if any(x in q for x in [
+        "where is motion",
+        "active motion",
+        "motion right now",
+        "is there motion",
+        "which rooms have motion",
+        "what rooms have motion",
+    ]):
         if motion_active_rooms:
-            return f"Motion is currently active in {_join_room_labels(motion_active_rooms)}."
+            return f"Active motion is currently detected in {_join_natural(motion_active_rooms)}."
         return "I do not currently see any active motion."
 
-    if (
-        "occupied" in q
-        or "occupancy" in q
-        or "which rooms are active" in q
-        or "active rooms" in q
-        or "is anyone home" in q
-        or "presence" in q
-    ):
-        if occupied_rooms:
-            return f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}."
-        return "I do not see any occupied rooms right now."
-
-    if "house sensors" in q or "sensor" in q or "room activity" in q:
+    if any(x in q for x in [
+        "house sensors",
+        "house sensor",
+        "sensor overview",
+        "sensor state",
+        "what do the house sensors say",
+        "what do sensors say",
+    ]):
         parts = []
 
         if occupied_rooms:
-            parts.append(f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}.")
-        else:
-            parts.append("I do not see any occupied rooms right now.")
+            parts.append(f"Occupied rooms right now are {_join_natural(occupied_rooms)}.")
 
         if lighting_active_rooms:
-            parts.append(f"Lights appear active in {_join_room_labels(lighting_active_rooms)}.")
+            parts.append(f"Lights are on in {_join_natural(lighting_active_rooms)}.")
+        else:
+            parts.append("No lights currently appear active.")
 
         if motion_active_rooms:
-            parts.append(f"Motion is currently active in {_join_room_labels(motion_active_rooms)}.")
+            parts.append(f"Motion is active in {_join_natural(motion_active_rooms)}.")
 
-        return " ".join(parts)
+        if active_no_presence_rooms:
+            parts.append(
+                f"Some rooms show recent activity without active presence, including {_join_natural(active_no_presence_rooms[:5])}."
+            )
+
+        if unknown_rooms:
+            parts.append(
+                f"Some rooms still have no clear live sensor data, including {_join_natural(unknown_rooms[:5])}."
+            )
+
+        if parts:
+            return " ".join(parts)
+
+    parts = [f"I checked house sensors across {len(rooms)} rooms."]
 
     if occupied_rooms:
-        return f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}."
+        parts.append(f"{len(occupied_rooms)} rooms appear occupied: {_join_natural(occupied_rooms[:5])}.")
+    else:
+        parts.append("No rooms currently appear occupied.")
 
-    return "I do not see any occupied rooms right now."
+    if lighting_active_rooms:
+        parts.append(f"Lights are active in {_join_natural(lighting_active_rooms[:5])}.")
+    else:
+        parts.append("No lights currently appear active.")
+
+    if motion_active_rooms:
+        parts.append(f"Motion is active in {_join_natural(motion_active_rooms[:5])}.")
+
+    if presence_active_rooms:
+        parts.append(f"Presence is active in {_join_natural(presence_active_rooms[:5])}.")
+
+    if idle_rooms:
+        parts.append(f"Idle rooms include {_join_natural(idle_rooms[:5])}.")
+
+    if active_no_presence_rooms:
+        parts.append(
+            f"Recent activity without active presence is visible in {_join_natural(active_no_presence_rooms[:5])}."
+        )
+
+    if unknown_rooms:
+        parts.append(
+            f"No clear live sensor data is available in {_join_natural(unknown_rooms[:5])}."
+        )
+
+    return " ".join(parts)
+
+
 
 
 
