@@ -478,10 +478,12 @@ def _summarize_service_warnings(services: dict) -> list[str]:
 
     parts = []
     if warning_nodes:
-        parts.append(f"Service warnings exist on {_join_natural(warning_nodes)}.")
+        parts.append(f"Some services still need attention on {_join_natural(warning_nodes)}.")
     if offline_nodes:
-        parts.append(f"Offline or error service nodes: {_join_natural(offline_nodes)}.")
+        parts.append(f"Service monitoring is unavailable on {_join_natural(offline_nodes)}.")
     return parts
+
+
 
 
 
@@ -535,26 +537,51 @@ def _summarize_house_state(data: dict, action: dict) -> str:
 
     parts = []
 
+
+
     if power_watts is not None:
         try:
-            kw = round(float(power_watts) / 1000.0, 2)
-            parts.append(f"The house is currently using {kw} kilowatts.")
+            kw = round(abs(float(power_watts)) / 1000.0, 2)
+            raw_watts = float(power_watts)
+
+            if raw_watts < 0:
+                parts.append(f"The house is currently exporting {kw} kilowatts.")
+            else:
+                parts.append(f"The house is currently using {kw} kilowatts.")
         except Exception:
             parts.append(f"Current house power is {power_watts} watts.")
 
+
+
     if telemetry_rooms_seen:
-        if climate_preview:
-            parts.append(
-                f"Temperatures are stable across the house. For example: {'; '.join(climate_preview)}."
-            )
-        else:
-            parts.append("Temperature data is available but no clear summary could be generated.")
+        temps = []
+        for room_name, values in grouped.items():
+            temp = values.get("tempActual")
+            if temp is not None:
+                try:
+                    temps.append(float(temp))
+                except Exception:
+                    pass
+
+        if temps:
+            t_min = min(temps)
+            t_max = max(temps)
 
 
-    if warning_nodes:
-        parts.append(f"Node warnings detected on {_join_natural(warning_nodes)}.")
-    if offline_nodes:
-        parts.append(f"Offline or error nodes: {_join_natural(offline_nodes)}.")
+            if (t_max - t_min) < 1.0:
+                parts.append(f"Temperatures are stable across the house, around {t_min:.1f} degrees.")
+            else:
+                parts.append(f"Temperatures are normal across the house, roughly {t_min:.1f} to {t_max:.1f} degrees.")
+
+
+    if warning_nodes or offline_nodes:
+        if offline_nodes:
+            if len(offline_nodes) == 1:
+                parts.append(f"One node is offline: {offline_nodes[0]}.")
+            else:
+                parts.append(f"Offline nodes: {', '.join(offline_nodes)}.")
+        if warning_nodes:
+            parts.append(f"{len(warning_nodes)} nodes report warnings.")
 
 
 
@@ -570,7 +597,7 @@ def _summarize_house_state(data: dict, action: dict) -> str:
         else:
             parts.append("Audio playback is currently active.")
     else:
-        parts.append("No audio playback is currently active.")
+        parts.append("The house is quiet right now.")
 
     return " ".join(parts)
 
