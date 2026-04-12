@@ -116,3 +116,135 @@ When new features are added:
 5. keep this index accurate
 
 This keeps the knowledge pack usable for future AI retrieval.
+
+
+
+# House AI Knowledge Index
+
+Last updated: 2026-04-12
+
+## Purpose
+
+This index is the top-level navigation file for the `house-ai-knowledge` documentation set.
+
+It is intended to help future work quickly locate:
+
+- current project state
+- architecture docs
+- service and route docs
+- roadmap files
+- validation docs
+- policy files
+- device and voice information
+
+## Start here
+
+For the fastest current understanding, read these first:
+
+1. `README.md`
+2. `services/00-current-project-state.md`
+3. `services/01-phase-status.md`
+4. `services/02-next-priorities.md`
+5. `roadmap/00-roadmap-master.md`
+6. `architecture/01-system-architecture.md`
+
+## Current-state and phase documents
+
+- `services/00-current-project-state.md`
+- `services/01-phase-status.md`
+- `services/02-next-priorities.md`
+
+These describe where the project stands right now and what should happen next.
+
+## Architecture
+
+- `architecture/01-system-architecture.md`
+- `01_architecture.md`
+
+These explain the high-level design and system structure.
+
+## Core services and room intelligence
+
+Key service-level docs:
+
+- `services/04-agent-and-routing.md`
+- `services/06-house-state-pipeline.md`
+- `services/11_house_ai_current_status.md`
+- `services/22-room-intelligence-query-routing.md`
+- `services/23-house-sensor-reasoning-model.md`
+- `services/24-room-intelligence-validation-notes.md`
+
+These are the most important documents for the current intelligence-layer work.
+
+## Operations and validation
+
+- `ops/11-health-monitoring.md`
+- `ops/14-repo-notes-and-exclusions.md`
+- `ops/15-validation-checklist.md`
+- `ops/16-known-issues-watchlist.md`
+
+These cover operational and validation concerns.
+
+## Roadmaps
+
+Primary roadmap files:
+
+- `roadmap/00-roadmap-master.md`
+- `12_roadmap.md`
+- `roadmap/07_next_phase_roadmap.md`
+- `roadmap/15-ai-evolution-roadmap.md`
+- `automation/13-future-scheduling-roadmap.md`
+
+Also see project root:
+
+- `../ROADMAP_VOICE.md`
+
+## Devices, voice, and data
+
+Important supporting docs:
+
+- `devices/06-loxone-and-audio.md`
+- `devices/07-energy-and-sensors.md`
+- `voice/08-voice-system.md`
+- `data/09-runtime-data-and-state.md`
+
+## Policy and safety
+
+Important safety/policy files:
+
+- `policy/executor_policy.md`
+- `policy/action_registry.json`
+- `policy/safe_route_allowlist.json`
+- `policy/safe_tool_allowlist.json`
+- `security/12-safety-guardrails.md`
+- `09_safety.md`
+
+## Generated and support docs
+
+Generated or support-oriented docs include:
+
+- `generated/tool_map.md`
+- `generated/tool_map.json`
+- `services/17-generated-tool-map.md`
+
+## Current most important implementation context
+
+Recent important implementation areas include:
+
+- room intelligence via `services/agent_router_bridge.py`
+- query routing behavior via `routes/agent_routes.py`
+- compact room-intelligence answer behavior
+- safe separation between action queries and house-state queries
+
+These are reflected in the new service and ops docs listed above.
+
+## Documentation organization rule
+
+New docs should be stored with their matching family:
+
+- project/current-state and room-intelligence docs → `services/`
+- validation and issue watch docs → `ops/`
+- roadmap docs → `roadmap/`
+- architecture updates → `architecture/`
+
+Avoid creating parallel top-level doc folders unless there is a strong reason.
