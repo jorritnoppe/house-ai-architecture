@@ -11,6 +11,10 @@ from routes.loxone_routes import _ai_fetch_history, _ai_telemetry_latest
 
 from services.power_service import get_power_now_data, get_energy_summary_data
 from services.energy_service import energy_service
+from services.house_sensors_service import get_house_sensors
+
+
+
 
 
 SOLAR_ACTIVE_THRESHOLD_KW = 0.15
@@ -110,6 +114,11 @@ def get_house_state() -> Dict[str, Any]:
     energy_summary = _safe_call(get_energy_summary_data, {"status": "error"})
     energy_snapshot = _safe_call(energy_service.get_live_snapshot, {"status": "error"})
     energy_flow = _safe_call(energy_service.get_power_flow_summary, {"status": "error"})
+
+    house_sensors = _safe_call(
+        lambda: get_house_sensors(minutes=60, limit=8000),
+        {"status": "error"},
+    )
 
     telemetry = _safe_call(
         lambda: _get_latest_telemetry(minutes=120),
@@ -289,6 +298,33 @@ def get_house_state() -> Dict[str, Any]:
 
 
 
+    occupied_rooms = []
+    lighting_active_rooms = []
+    rooms_with_sensor_data = []
+    rooms_idle = []
+    rooms_unknown = []
+
+    if isinstance(house_sensors, dict) and house_sensors.get("status") == "ok":
+        for room_entry in (house_sensors.get("rooms") or []):
+            room_name = room_entry.get("room")
+            room_status = room_entry.get("room_status")
+            has_any_sensor_data = bool(room_entry.get("has_any_sensor_data"))
+
+            if has_any_sensor_data and room_name:
+                rooms_with_sensor_data.append(room_name)
+
+            if room_status == "occupied" and room_name:
+                occupied_rooms.append(room_name)
+            elif room_status == "idle" and room_name:
+                rooms_idle.append(room_name)
+            elif room_status == "unknown" and room_name:
+                rooms_unknown.append(room_name)
+
+            if ((room_entry.get("lighting") or {}).get("is_on")) and room_name:
+                lighting_active_rooms.append(room_name)
+
+
+
 
     return {
         "status": "ok",
@@ -309,6 +345,7 @@ def get_house_state() -> Dict[str, Any]:
         "nodes_health": nodes_health,
         "services": services_overview,
         "crypto": crypto_summary,
+        "house_sensors": house_sensors,
         "summary": {
             "current_power_watts": power.get("power_watts"),
             "telemetry_rooms_seen": len(rooms_seen),
@@ -333,5 +370,15 @@ def get_house_state() -> Dict[str, Any]:
             "excess_energy_available_kw": excess_energy_available_kw,
             "excess_energy_state": excess_energy_state,
             "excess_energy_reason": excess_energy_reason,
+            "occupied_rooms": occupied_rooms,
+            "occupied_room_count": len(occupied_rooms),
+            "lighting_active_rooms": lighting_active_rooms,
+            "lighting_active_room_count": len(lighting_active_rooms),
+            "rooms_with_sensor_data": rooms_with_sensor_data,
+            "rooms_with_sensor_data_count": len(rooms_with_sensor_data),
+            "rooms_idle": rooms_idle,
+            "rooms_idle_count": len(rooms_idle),
+            "rooms_unknown": rooms_unknown,
+            "rooms_unknown_count": len(rooms_unknown),
         },
     }

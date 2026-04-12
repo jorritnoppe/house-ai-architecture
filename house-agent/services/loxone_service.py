@@ -79,14 +79,13 @@ def _clean_climate_value(metric: str | None, value):
     if metric in {"outdoor_temperature", "outdoor_temperature_avg"} and numeric <= -999:
         return None
 
-    if metric == "humidity" and numeric < 0:
+    if metric == "humidity" and numeric <= 0:
         return None
 
-    if metric == "co2" and numeric < 0:
+    if metric == "co2" and numeric <= 0:
         return None
 
     return numeric
-
 
 
 # --------------------------------------------------
@@ -171,6 +170,176 @@ def _preferred_state_keys_for_type(control_type: str):
     if "jalousie" in ct or "blind" in ct:
         return ["position", "shadePosition", "up", "down", "active"]
     return ["value", "active", "tempActual", "position"]
+
+
+
+
+def _looks_like_action_control(name: str, control_type: str, state_keys: list[str]) -> bool:
+    name_n = _normalize_text(name)
+    type_n = _normalize_text(control_type)
+    keys_n = {_normalize_text(k) for k in state_keys}
+
+    action_name_markers = [
+        "_button",
+        "_on_button",
+        "_off_button",
+        "_scene_button",
+        "_reboot_button",
+        "_shutdown_button",
+        "_clean_shutdown_button",
+        "_update_button",
+        "_reset_counters_button",
+        "_approve_pulse",
+        "_pulse",
+    ]
+
+    if any(marker in name_n for marker in action_name_markers):
+        return True
+
+    if type_n in {
+        "pushbutton",
+        "button",
+        "daytimer",
+        "valueselector",
+        "textinput",
+    }:
+        return True
+
+    action_only_keys = {
+        "trigger",
+        "pulse",
+        "confirm",
+        "send",
+    }
+
+    if keys_n and keys_n.issubset(action_only_keys):
+        return True
+
+    return False
+
+
+def _preferred_live_state_keys(control: dict) -> list[str]:
+    sensor_type = _normalize_text(control.get("sensor_type"))
+    domain = _normalize_text(control.get("domain"))
+    control_type = _normalize_text(control.get("type"))
+
+    if domain == "climate":
+        return [
+            "tempActual",
+            "tempTarget",
+            "humidityActual",
+            "co2",
+            "openWindow",
+            "value",
+            "active",
+        ]
+
+    if sensor_type in {"presence", "motion"}:
+        return ["active", "events", "activeSince", "value"]
+
+    if sensor_type == "energy":
+        name_n = _normalize_text(control.get("name"))
+        if "energy flow monitor" in name_n or control_type == "efm":
+            return ["Ppwr", "Gpwr", "Spwr", "Pre", "Pri", "selfConsumption", "value"]
+        return [
+            "consCurr",
+            "prodCurr",
+            "gridCurr",
+            "batteryCurr",
+            "stateOfCharge",
+            "online",
+            "mode",
+            "value",
+            "active",
+        ]
+
+    if sensor_type == "water":
+        return ["actual", "totalDay", "total", "value", "active"]
+
+    if sensor_type == "security":
+        return ["active", "value", "currentStatus", "online"]
+
+    if sensor_type == "lighting":
+        return ["active", "value", "position"]
+
+    if sensor_type == "cover":
+        return ["position", "shadePosition", "active", "value"]
+
+    if sensor_type == "switch":
+        return ["active", "value"]
+
+    if sensor_type == "heating":
+        return ["value", "active", "tempActual"]
+
+    return _preferred_state_keys_for_type(control.get("type"))
+
+
+def _is_control_live_readable(control: dict) -> bool:
+    name = str(control.get("name") or "")
+    control_type = str(control.get("type") or "")
+    state_keys = list((control.get("states") or {}).keys())
+
+    domain = _normalize_text(control.get("domain"))
+    sensor_type = _normalize_text(control.get("sensor_type"))
+    role = _normalize_text(control.get("role"))
+    name_n = _normalize_text(name)
+    type_n = _normalize_text(control_type)
+    keys_n = {_normalize_text(k) for k in state_keys}
+
+    if not state_keys:
+        return False
+
+    if _looks_like_action_control(name, control_type, state_keys):
+        return False
+
+    disallowed_types = {
+        "nfccodetouch",
+        "intercom",
+    }
+    if type_n in disallowed_types:
+        return False
+
+    if sensor_type in {
+        "climate_controller",
+        "climate_hvac_controller",
+        "presence",
+        "motion",
+        "energy",
+        "water",
+        "security",
+    }:
+        return True
+
+    if domain in {"climate", "presence", "energy", "water", "security"}:
+        return True
+
+    if sensor_type in {"lighting", "cover"}:
+        return True
+
+    if role == "sensor" and any(k in keys_n for k in {
+        "value",
+        "active",
+        "actual",
+        "tempactual",
+        "humidityactual",
+        "co2",
+        "position",
+        "currentstatus",
+    }):
+        return True
+
+    if any(k in keys_n for k in {
+        "actual",
+        "tempactual",
+        "humidityactual",
+        "co2",
+        "position",
+    }):
+        return True
+
+    return False
+
+
 
 
 # --------------------------------------------------
@@ -645,12 +814,13 @@ def classify_control(control: dict) -> dict:
 
     readable_keys = {
         "value",
+        "active",
+        "actual",
         "tempactual",
         "temptarget",
         "humidityactual",
         "humidity",
         "co2",
-        "active",
         "position",
         "shadeposition",
         "operatingmode",
@@ -662,12 +832,35 @@ def classify_control(control: dict) -> dict:
         "demandcool",
         "mode",
         "currentstatus",
+        "conscurr",
+        "prodcurr",
+        "gridcurr",
+        "batterycurr",
+        "stateofcharge",
+        "ppwr",
+        "gpwr",
+        "spwr",
+        "pre",
+        "pri",
+        "selfconsumption",
+        "total",
+        "totalday",
+        "totalweek",
+        "totalmonth",
+        "totalyear",
+        "online",
+        "events",
+        "activesince",
     }
 
     readable = any(k in state_keys for k in readable_keys)
 
-    if ctrl_type_n in {"nfccodetouch"}:
+    if _looks_like_action_control(name, ctrl_type, list(states.keys())):
         readable = False
+
+    if ctrl_type_n in {"nfccodetouch", "intercom"}:
+        readable = False
+
 
     seen = set()
     deduped_tags = []
@@ -1020,7 +1213,7 @@ def get_control_state_uuid(control, preferred_keys=None):
 
 
 def get_control_live_value(control: dict):
-    preferred = _preferred_state_keys_for_type(control.get("type"))
+    preferred = _preferred_live_state_keys(control)
     state_info = get_control_state_uuid(control, preferred_keys=preferred)
 
     if state_info.get("status") != "ok":
@@ -1031,7 +1224,29 @@ def get_control_live_value(control: dict):
             "message": "No readable state UUID found",
         }
 
-    value_result = fetch_loxone_state_value(state_info["uuid"])
+    value_result = _get_state_value_with_ws_fallback(state_info["uuid"])
+
+    if value_result.get("status") != "ok":
+        return {
+            "status": "error",
+            "uuid": control.get("uuid"),
+            "name": control.get("name"),
+            "room_name": control.get("room_name"),
+            "type": control.get("type"),
+            "domain": control.get("domain"),
+            "sensor_type": control.get("sensor_type"),
+            "state_key": state_info["state_key"],
+            "state_uuid": state_info["uuid"],
+            "message": value_result.get("error") or "Failed to read live value",
+        }
+
+    raw_value = value_result.get("value")
+
+    metric = _metric_from_climate_state_key(state_info["state_key"])
+    if _normalize_text(control.get("domain")) == "climate":
+        cleaned_value = _clean_climate_value(metric, raw_value)
+    else:
+        cleaned_value = raw_value
 
     return {
         "status": "ok",
@@ -1043,9 +1258,9 @@ def get_control_live_value(control: dict):
         "sensor_type": control.get("sensor_type"),
         "state_key": state_info["state_key"],
         "state_uuid": state_info["uuid"],
-        "value": value_result.get("value"),
+        "value": cleaned_value,
         "unit": _guess_unit(control.get("name"), control.get("cat_name"), state_info["state_key"]),
-        "raw": value_result.get("raw"),
+        "source": value_result.get("source"),
     }
 
 
@@ -1056,13 +1271,12 @@ def get_live_values_by_room(room_name: str, domain: str | None = None, sensors_o
     if sensors_only:
         items = [item for item in items if item.get("readable")]
 
+    items = [item for item in items if _is_control_live_readable(item)]
+
     values = []
     errors = []
 
     for item in items:
-        if not item.get("readable"):
-            continue
-
         try:
             if str(item.get("domain") or "").lower() == "climate" and str(item.get("type") or "").lower() in {
                 "iroomcontrollerv2",
@@ -1174,13 +1388,12 @@ def get_all_live_values(domain: str | None = None, sensors_only: bool = True):
     if sensors_only:
         items = [item for item in items if item.get("readable")]
 
+    items = [item for item in items if _is_control_live_readable(item)]
+
     values = []
     errors = []
 
     for item in items:
-        if not item.get("readable"):
-            continue
-
         try:
             if str(item.get("domain") or "").lower() == "climate" and str(item.get("type") or "").lower() in {
                 "iroomcontrollerv2",
@@ -1190,7 +1403,15 @@ def get_all_live_values(domain: str | None = None, sensors_only: bool = True):
                 values.extend(climate_result.get("items", []))
                 errors.extend(climate_result.get("errors", []))
             else:
-                values.append(get_control_live_value(item))
+                value_result = get_control_live_value(item)
+                if isinstance(value_result, dict) and value_result.get("status") == "ok":
+                    values.append(value_result)
+                else:
+                    errors.append({
+                        "uuid": item.get("uuid"),
+                        "name": item.get("name"),
+                        "error": value_result.get("message", "Unknown error") if isinstance(value_result, dict) else "Unknown error",
+                    })
         except Exception as exc:
             errors.append({
                 "uuid": item.get("uuid"),
@@ -1207,6 +1428,7 @@ def get_all_live_values(domain: str | None = None, sensors_only: bool = True):
         "items": values,
         "errors": errors,
     }
+
 
 
 
@@ -1676,6 +1898,7 @@ def get_climate_live_values_for_control(item):
         metric = _metric_from_climate_state_key(state_key)
 
         if state_result.get("status") == "ok":
+            cleaned_value = _clean_climate_value(metric, state_result.get("value"))
             values.append({
                 "uuid": item.get("uuid"),
                 "name": item.get("name"),
@@ -1686,9 +1909,10 @@ def get_climate_live_values_for_control(item):
                 "state_key": state_key,
                 "state_uuid": state_uuid,
                 "metric": metric,
-                "value": state_result.get("value"),
+                "value": cleaned_value,
                 "source": state_result.get("source", "unknown"),
             })
+
         else:
             errors.append({
                 "uuid": item.get("uuid"),
