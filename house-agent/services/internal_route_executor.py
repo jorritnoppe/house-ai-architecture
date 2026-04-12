@@ -21,6 +21,12 @@ from services.service_health_service import get_local_service_health, get_servic
 from services.house_state_service import get_house_state
 from services.unified_playback_state_service import get_unified_playback_state
 
+from services.energy_service import energy_service
+
+
+
+
+
 
 
 def _execute_loxone_history_presence(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -184,7 +190,7 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
         }
 
     if path == "/ai/service/summary":
-        node = (params or {}).get("node", "house-ai-server")
+        node = (params or {}).get("node", "ai-server")
         return {
             "status": "ok",
             "data": get_service_health_for_node(node)
@@ -197,6 +203,11 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
         }
 
 
+    if path == "/ai/unified_energy_summary":
+        return energy_service.get_energy_ai_summary()
+
+    if path == "/ai/unified_energy_snapshot":
+        return energy_service.get_live_snapshot()
 
 
     if path == "/ai/playback_state":

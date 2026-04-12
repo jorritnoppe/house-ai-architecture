@@ -31,6 +31,8 @@ SAFE_READ_TARGETS = {
     "/ai/water_softener_overview",
     "/ai/pdata_gas_summary",
     "/ai/pdata_full_overview",
+    "/ai/unified_energy_summary",
+    "/ai/unified_energy_snapshot",
 }
 
 APPROVAL_REQUIRED_TARGETS = {

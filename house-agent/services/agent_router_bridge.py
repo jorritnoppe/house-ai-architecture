@@ -162,12 +162,12 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         }
 
     node_aliases = {
-        "house-ai-server": ["house-ai-server", "aiserver", "server", "ai server"],
-        "voice-node-1": ["voice-node-1", "desk pi", "deskroom pi", "desk room pi"],
-        "audio-node-1": ["audio-node-1", "electric pi", "music pi", "audio pi"],
-        "aux-node-1": ["aux-node-1", "luifel pi"],
-        "feedback-node": ["feedback-node", "discover pi"],
-        "utility-node-1": ["utility-node-1", "attack pi", "atticpi", "attic pi", "atticroom pi", "attack pi atticroom"],
+        "ai-server": ["ai-server", "aiserver", "server", "ai server"],
+        "deskpi": ["deskpi", "desk pi", "deskroom pi", "desk room pi"],
+        "electricpi": ["electricpi", "electric pi", "music pi", "audio pi"],
+        "luifelpi": ["luifelpi", "luifel pi"],
+        "discoverpi": ["discoverpi", "discover pi"],
+        "attackpi": ["attackpi", "attack pi", "atticpi", "attic pi", "atticroom pi", "attack pi atticroom"],
     }
 
     matched_node = None
@@ -254,7 +254,7 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     if (
         ("service" in q or "services" in q or "ollama" in q or "house-agent" in q)
         and any(x in q for x in ["health", "status", "running", "alive", "up"])
-        and any(x in q for x in ["local", "this server", "house-ai-server", "on server"])
+        and any(x in q for x in ["local", "this server", "ai-server", "on server"])
         and matched_node is None
         and matched_service is None
     ):
@@ -339,8 +339,12 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
 
     if any(x in q for x in [
         "solar", "pv", "inverter", "sma", "solar production", "how much solar",
+        "grid import", "grid export", "importing from the grid", "exporting to the grid",
+        "energy flow", "power flow", "house load", "house usage", "using now",
+        "current house usage", "current house load", "solar vs grid",
     ]):
-        return {"type": "route", "target": "/ai/sma_summary"}
+        return {"type": "route", "target": "/ai/unified_energy_summary"}
+
 
     if any(x in q for x in [
         "cheapest hours", "cheap electricity", "best hours to use power",
@@ -906,6 +910,52 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
         if price:
             return f"Electricity currently costs {_fmt(price, ' euro per kilowatt hour')}."
         return "I could not read the electricity price."
+
+
+    if target == "/ai/unified_energy_summary":
+        structured = data.get("structured", {})
+        solar = structured.get("solar_power_kw")
+        grid_in = structured.get("grid_import_kw")
+        grid_out = structured.get("grid_export_kw")
+        load = structured.get("estimated_house_load_kw")
+        net_grid = structured.get("net_grid_kw")
+
+        q = (question or "").lower()
+
+        if any(x in q for x in ["solar", "pv", "inverter", "sma", "solar production"]):
+            if solar is not None:
+                return f"Solar is currently producing {_fmt(solar, ' kilowatts')}."
+            return "I could not read current solar production."
+
+        if any(x in q for x in ["grid", "import", "export", "importing from the grid", "exporting to the grid"]):
+            if grid_out is not None and float(grid_out) > 0:
+                return f"The house is currently exporting {_fmt(grid_out, ' kilowatts')} to the grid."
+            if grid_in is not None:
+                return f"The house is currently importing {_fmt(grid_in, ' kilowatts')} from the grid."
+            if net_grid is not None:
+                return f"Net grid flow is currently {_fmt(net_grid, ' kilowatts')}."
+            return "I could not read the current grid flow."
+
+        if any(x in q for x in ["house load", "house usage", "using now", "current house usage", "current house load", "load"]):
+            if load is not None:
+                return f"The estimated house load is {_fmt(load, ' kilowatts')} right now."
+            return "I could not read the current house load."
+
+        answer = data.get("answer")
+        if answer:
+            return answer
+
+        if load is not None:
+            return (
+                f"The house is using {_fmt(load, ' kilowatts')} right now, "
+                f"solar is producing {_fmt(solar, ' kilowatts')}, "
+                f"grid import is {_fmt(grid_in, ' kilowatts')}, "
+                f"and grid export is {_fmt(grid_out, ' kilowatts')}."
+            )
+
+        return "I could not build the unified energy summary."
+
+
 
     if target == "/ai/energy_summary":
         power = data.get("power_watts")

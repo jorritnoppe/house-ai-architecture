@@ -113,8 +113,11 @@ def route_history_question(question: str) -> dict[str, Any]:
     wants_telemetry = _contains_any(text, [
         "temperature", "humidity", "climate", "telemetry",
         "latest temperature", "latest humidity", "latest climate",
-        "power", "solar", "water", "gas", "price"
+        "water", "gas", "price"
     ])
+
+
+
 
     wants_room_summary = _contains_any(text, [
         "room summary", "room activity", "per room", "which rooms",

@@ -72,7 +72,7 @@ from routes.approval_signal_routes import approval_signal_bp
 from routes.house_analysis_routes import house_analysis_bp
 
 from routes.trade_routes import trade_bp
-
+from routes.energy_routes import energy_bp
 
 # Enable CORS
 # CORS(app) -> Already loading in extensions
@@ -159,6 +159,10 @@ app.register_blueprint(trade_bp)
 
 # Start Loxone websocket background listener
 start_loxone_ws_background()
+
+app.register_blueprint(energy_bp)
+
+
 
 
 

@@ -1,11 +1,15 @@
 {
-  "version": "2026-03-27",
+  "version": "2026-04-12",
   "notes": [
     "Safe routes are read-oriented and suitable for autonomous AI use.",
     "They should not create uncontrolled physical side effects."
   ],
   "routes": [
     "/ai/power_now",
+    "/ai/energy_summary",
+    "/ai/energy_today",
+    "/ai/unified_energy_snapshot",
+    "/ai/unified_energy_summary",
     "/ai/loxone_history_telemetry_latest",
     "/tools/music/status",
     "/ai/audio_timing_health",
