@@ -7,6 +7,9 @@ from services.agent_service import handle_agent_question
 from services.house_ai_history_router import route_history_question
 from services.action_auth_service import classify_action_auth
 from services.pending_approval_service import get_pending_approval_service
+from services.house_summary_policy import summarize_house_state
+
+
 
 
 def _extract_announcement_text(question: str) -> Optional[str]:
@@ -318,6 +321,23 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     ]):
         return {"type": "route", "target": "/ai/power_now"}
 
+
+    if any(x in q for x in [
+        "excess electricity",
+        "excess energy",
+        "surplus power",
+        "surplus energy",
+        "free electricity",
+        "available solar",
+        "spare solar",
+        "extra solar",
+        "do we have excess",
+        "is there excess energy",
+        "can we use extra power",
+    ]):
+        return {"type": "route", "target": "/ai/unified_energy_summary"}
+
+
     history_route = route_history_question(question)
     if history_route and history_route.get("status") == "ok" and history_route.get("target"):
         return {
@@ -382,11 +402,38 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         return {"type": "route", "target": "/ai/pdata_full_overview"}
 
     if any(x in q for x in [
+        "system health overview",
+        "system overview",
+        "technical overview",
+        "technical house status",
+        "technical status",
+        "house infrastructure overview",
+        "node health overview",
+        "node overview",
+        "which nodes have issues",
+        "what nodes have issues",
+        "which nodes are offline",
+        "what nodes are offline",
+        "monitoring overview",
+        "service monitoring overview",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_state",
+            "params": {"summary_mode": "system"},
+        }
+
+    if any(x in q for x in [
         "house state", "house summary", "house overview",
         "house diagnostics", "house status",
         "full house state", "current house state",
     ]):
-        return {"type": "route", "target": "/ai/house_state"}
+        return {
+            "type": "route",
+            "target": "/ai/house_state",
+            "params": {"summary_mode": "overview"},
+        }
+
 
     if any(x in q for x in [
         "playback state", "audio state", "voice playback state",
@@ -488,134 +535,56 @@ def _summarize_service_warnings(services: dict) -> list[str]:
 
 
 def _summarize_house_state(data: dict, action: dict) -> str:
+    params = (action or {}).get("params") or {}
+    summary_mode = str(params.get("summary_mode") or "overview").strip().lower()
+
+    if summary_mode not in {"overview", "briefing", "system"}:
+        summary_mode = "overview"
+
+    try:
+        summary_text = summarize_house_state(data, mode=summary_mode)
+        if summary_text:
+            return summary_text
+    except Exception:
+        pass
+
     summary = data.get("summary", {}) or {}
-    power_watts = summary.get("current_power_watts")
-    telemetry_rooms_seen = summary.get("telemetry_rooms_seen")
-
-    nodes_health = ((data.get("nodes_health") or {}).get("data") or {})
-    warning_nodes = []
-    offline_nodes = []
-
-    for node_name, item in nodes_health.items():
-        status = str(item.get("status") or "").lower()
-        if status == "warning":
-            warning_nodes.append(node_name)
-        elif status not in {"ok", ""}:
-            offline_nodes.append(node_name)
-
-    services = data.get("services", {}) or {}
-    service_parts = _summarize_service_warnings(services)
-
-    audio_effective = (((data.get("audio") or {}).get("effective")) or {})
-    audio_active = audio_effective.get("active")
-    audio_room = audio_effective.get("effective_target_room")
-
-    telemetry = data.get("telemetry", {}) or {}
-    telemetry_items = telemetry.get("items", []) or []
-
-    grouped = {}
-    for item in telemetry_items:
-        room_name = item.get("room")
-        if not room_name or _is_noise_room(room_name):
-            continue
-        grouped.setdefault(room_name, {})
-        grouped[room_name][item.get("state_key")] = item.get("value")
-
-    climate_preview = []
-    for room_name in sorted(grouped.keys())[:3]:
-        temp = grouped[room_name].get("tempActual")
-        hum = grouped[room_name].get("humidityActual")
-
-        sub = [_human_room_label(room_name)]
-        if temp is not None:
-            sub.append(f"{round(float(temp), 1)} C")
-        if hum is not None:
-            sub.append(f"{round(float(hum), 1)} percent humidity")
-
-        if len(sub) > 1:
-            climate_preview.append(", ".join(sub))
-
-    parts = []
-
-
-
     interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
-    interpreted_grid_import_kw = summary.get("interpreted_grid_import_kw")
-    interpreted_grid_export_kw = summary.get("interpreted_grid_export_kw")
-    interpreted_solar_power_kw = summary.get("interpreted_solar_power_kw")
+    power_watts = summary.get("current_power_watts")
 
     if interpreted_house_load_kw is not None:
         try:
-            load_kw = round(float(interpreted_house_load_kw), 2)
-            if interpreted_grid_export_kw is not None and float(interpreted_grid_export_kw) > 0.02:
-                parts.append(f"The house is currently using {load_kw} kilowatts, with some solar excess being exported.")
-            elif interpreted_grid_import_kw is not None and float(interpreted_grid_import_kw) > 0.02:
-                parts.append(f"The house is currently using {load_kw} kilowatts and still importing a little grid power.")
-            else:
-                parts.append(f"The house is currently using {load_kw} kilowatts.")
+            if summary_mode == "system":
+                offline_nodes = summary.get("offline_nodes") or []
+                warning_nodes_count = summary.get("warning_nodes_count")
+                service_warning_hosts = summary.get("service_warning_hosts") or []
+                monitoring_unavailable_nodes = summary.get("monitoring_unavailable_nodes") or []
+
+                parts = [
+                    f"Current interpreted house load is {round(float(interpreted_house_load_kw), 2)} kilowatts."
+                ]
+                if offline_nodes:
+                    parts.append(f"Offline nodes: {', '.join(offline_nodes)}.")
+                if warning_nodes_count:
+                    parts.append(f"Nodes with warnings: {warning_nodes_count}.")
+                if service_warning_hosts:
+                    parts.append(f"Service warnings are present on: {', '.join(service_warning_hosts)}.")
+                if monitoring_unavailable_nodes:
+                    parts.append(f"Service monitoring is unavailable on: {', '.join(monitoring_unavailable_nodes)}.")
+                return " ".join(parts)
+
+            return f"The house is currently using {round(float(interpreted_house_load_kw), 2)} kilowatts."
         except Exception:
-            parts.append("The house energy flow is available.")
-    elif power_watts is not None:
+            return "The house state is available, but the summary could not be fully rendered."
+
+    if power_watts is not None:
         try:
             kw = round(abs(float(power_watts)) / 1000.0, 2)
-            if float(power_watts) < 0:
-                parts.append(f"The house currently has net export of {kw} kilowatts.")
-            else:
-                parts.append(f"The house is currently using {kw} kilowatts.")
+            return f"The house is currently using about {kw} kilowatts."
         except Exception:
-            parts.append(f"Current house power is {power_watts} watts.")
+            return "The house state is available, but the summary could not be fully rendered."
 
-
-
-
-
-    if telemetry_rooms_seen:
-        temps = []
-        for room_name, values in grouped.items():
-            temp = values.get("tempActual")
-            if temp is not None:
-                try:
-                    temps.append(float(temp))
-                except Exception:
-                    pass
-
-        if temps:
-            t_min = min(temps)
-            t_max = max(temps)
-
-
-            if (t_max - t_min) < 1.0:
-                parts.append(f"Temperatures are stable across the house, around {t_min:.1f} degrees.")
-            else:
-                parts.append(f"Temperatures are normal across the house, roughly {t_min:.1f} to {t_max:.1f} degrees.")
-
-
-    if warning_nodes or offline_nodes:
-        if offline_nodes:
-            if len(offline_nodes) == 1:
-                parts.append(f"One node is offline: {offline_nodes[0]}.")
-            else:
-                parts.append(f"Offline nodes: {', '.join(offline_nodes)}.")
-        if warning_nodes:
-            parts.append(f"{len(warning_nodes)} nodes report warnings.")
-
-
-
-    if not warning_nodes and not offline_nodes:
-        parts.append("All monitored nodes are operating normally.")
-
-
-    parts.extend(service_parts)
-
-    if audio_active:
-        if audio_room:
-            parts.append(f"Audio playback is currently active in {_human_room_label(audio_room)}.")
-        else:
-            parts.append("Audio playback is currently active.")
-    else:
-        parts.append("The house is quiet right now.")
-
-    return " ".join(parts)
+    return "The house state is available, but no concise overview could be generated."
 
 
 

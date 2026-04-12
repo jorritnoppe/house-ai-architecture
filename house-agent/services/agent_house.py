@@ -27,6 +27,8 @@ from services.sma_service import (
     get_sma_summary_data,
     get_sma_production_overview_data,
 )
+from services.energy_service import energy_service
+
 
 def _loxone_make_response(intent_name, tool_key, tool_data, answer):
     return {
@@ -49,10 +51,16 @@ def _join_top(items, limit=10):
     return f"{shown}, and {len(items) - limit} more"
 
 
+def _fmt_energy(v, unit=""):
+    if v is None:
+        return "unknown"
+    try:
+        return f"{float(v):.3f}{unit}"
+    except Exception:
+        return str(v)
+
+
 def build_loxone_direct_response(intents, tool_data):
-    # ------------------------------------------------------------
-    # Most specific Loxone intents first
-    # ------------------------------------------------------------
     if "loxone_lighting_controls_by_room" in intents and "loxone_lighting_controls_by_room" in tool_data:
         data = tool_data["loxone_lighting_controls_by_room"]
         room_name = data.get("room_name", "unknown room")
@@ -64,7 +72,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_lighting_controls_by_room",
             "loxone_lighting_controls_by_room",
             data,
-            f"Loxone lighting controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone lighting controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_temperature_controls_by_room" in intents and "loxone_temperature_controls_by_room" in tool_data:
@@ -78,7 +86,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_temperature_controls_by_room",
             "loxone_temperature_controls_by_room",
             data,
-            f"Loxone temperature-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone temperature-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_audio_controls_by_room" in intents and "loxone_audio_controls_by_room" in tool_data:
@@ -92,7 +100,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_audio_controls_by_room",
             "loxone_audio_controls_by_room",
             data,
-            f"Loxone audio-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone audio-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_presence_controls_by_room" in intents and "loxone_presence_controls_by_room" in tool_data:
@@ -106,7 +114,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_presence_controls_by_room",
             "loxone_presence_controls_by_room",
             data,
-            f"Loxone presence-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone presence-related controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_alarm_controls" in intents and "loxone_alarm_controls" in tool_data:
@@ -127,9 +135,6 @@ def build_loxone_direct_response(intents, tool_data):
             answer,
         )
 
-    # ------------------------------------------------------------
-    # Structure-level intents
-    # ------------------------------------------------------------
     if "loxone_rooms" in intents and "loxone_rooms" in tool_data:
         data = tool_data["loxone_rooms"]
         rooms = data.get("rooms", [])
@@ -139,7 +144,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_rooms",
             "loxone_rooms",
             data,
-            f"Loxone has {count} rooms configured: {_join_top(rooms, limit=25)}."
+            f"Loxone has {count} rooms configured: {_join_top(rooms, limit=25)}.",
         )
 
     if "loxone_categories" in intents and "loxone_categories" in tool_data:
@@ -151,7 +156,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_categories",
             "loxone_categories",
             data,
-            f"Loxone has {count} categories configured: {_join_top(categories, limit=25)}."
+            f"Loxone has {count} categories configured: {_join_top(categories, limit=25)}.",
         )
 
     if "loxone_structure_summary" in intents and "loxone_structure_summary" in tool_data:
@@ -165,12 +170,9 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_structure_summary",
             "loxone_structure_summary",
             data,
-            f"Loxone structure summary: {room_count} rooms, {category_count} categories, and {control_count} controls."
+            f"Loxone structure summary: {room_count} rooms, {category_count} categories, and {control_count} controls.",
         )
 
-    # ------------------------------------------------------------
-    # Generic room-level intents
-    # ------------------------------------------------------------
     if "loxone_controls_by_room" in intents and "loxone_controls_by_room" in tool_data:
         data = tool_data["loxone_controls_by_room"]
         room_name = data.get("room_name", "unknown room")
@@ -204,7 +206,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_control_names_by_room",
             "loxone_control_names_by_room",
             data,
-            f"Loxone control names in {room_name} ({count}): {_join_top(names, limit=20)}."
+            f"Loxone control names in {room_name} ({count}): {_join_top(names, limit=20)}.",
         )
 
     if "loxone_control_types_by_room" in intents and "loxone_control_types_by_room" in tool_data:
@@ -217,7 +219,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_control_types_by_room",
             "loxone_control_types_by_room",
             data,
-            f"Loxone control types in {room_name} ({count}): {_join_top(types, limit=20)}."
+            f"Loxone control types in {room_name} ({count}): {_join_top(types, limit=20)}.",
         )
 
     if "loxone_favorites_by_room" in intents and "loxone_favorites_by_room" in tool_data:
@@ -231,7 +233,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_favorites_by_room",
             "loxone_favorites_by_room",
             data,
-            f"Loxone favorites in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone favorites in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_secured_controls_by_room" in intents and "loxone_secured_controls_by_room" in tool_data:
@@ -245,7 +247,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_secured_controls_by_room",
             "loxone_secured_controls_by_room",
             data,
-            f"Loxone secured controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone secured controls in {room_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_subcontrols_by_room" in intents and "loxone_subcontrols_by_room" in tool_data:
@@ -265,12 +267,9 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_subcontrols_by_room",
             "loxone_subcontrols_by_room",
             data,
-            f"Loxone controls with subcontrols in {room_name}: {count}. {_join_top(names, limit=12)}."
+            f"Loxone controls with subcontrols in {room_name}: {count}. {_join_top(names, limit=12)}.",
         )
 
-    # ------------------------------------------------------------
-    # Generic category-level intents
-    # ------------------------------------------------------------
     if "loxone_controls_by_category" in intents and "loxone_controls_by_category" in tool_data:
         data = tool_data["loxone_controls_by_category"]
         category_name = data.get("category_name", "unknown category")
@@ -304,7 +303,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_control_names_by_category",
             "loxone_control_names_by_category",
             data,
-            f"Loxone control names in category {category_name} ({count}): {_join_top(names, limit=20)}."
+            f"Loxone control names in category {category_name} ({count}): {_join_top(names, limit=20)}.",
         )
 
     if "loxone_control_types_by_category" in intents and "loxone_control_types_by_category" in tool_data:
@@ -317,7 +316,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_control_types_by_category",
             "loxone_control_types_by_category",
             data,
-            f"Loxone control types in category {category_name} ({count}): {_join_top(types, limit=20)}."
+            f"Loxone control types in category {category_name} ({count}): {_join_top(types, limit=20)}.",
         )
 
     if "loxone_favorites_by_category" in intents and "loxone_favorites_by_category" in tool_data:
@@ -331,7 +330,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_favorites_by_category",
             "loxone_favorites_by_category",
             data,
-            f"Loxone favorites in category {category_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone favorites in category {category_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_secured_controls_by_category" in intents and "loxone_secured_controls_by_category" in tool_data:
@@ -345,7 +344,7 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_secured_controls_by_category",
             "loxone_secured_controls_by_category",
             data,
-            f"Loxone secured controls in category {category_name}: {count}. Names: {_join_top(names, limit=15)}."
+            f"Loxone secured controls in category {category_name}: {count}. Names: {_join_top(names, limit=15)}.",
         )
 
     if "loxone_subcontrols_by_category" in intents and "loxone_subcontrols_by_category" in tool_data:
@@ -365,12 +364,9 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_subcontrols_by_category",
             "loxone_subcontrols_by_category",
             data,
-            f"Loxone controls with subcontrols in category {category_name}: {count}. {_join_top(names, limit=12)}."
+            f"Loxone controls with subcontrols in category {category_name}: {count}. {_join_top(names, limit=12)}.",
         )
 
-    # ------------------------------------------------------------
-    # Search
-    # ------------------------------------------------------------
     if "loxone_controls_search" in intents and "loxone_controls_search" in tool_data:
         data = tool_data["loxone_controls_search"]
         term = data.get("search_term", "unknown")
@@ -382,19 +378,16 @@ def build_loxone_direct_response(intents, tool_data):
             "loxone_controls_search",
             "loxone_controls_search",
             data,
-            f"Loxone search for '{term}' returned {count} controls: {_join_top(names, limit=15)}."
+            f"Loxone search for '{term}' returned {count} controls: {_join_top(names, limit=15)}.",
         )
 
     return None
 
 
-
 def build_house_direct_response(question, intents, tool_data):
-
     loxone_response = build_loxone_direct_response(intents, tool_data)
     if loxone_response:
         return loxone_response
-
 
     if "compare_periods_from_question" in intents:
         parsed = parse_compare_periods_question(question)
@@ -443,9 +436,6 @@ def build_house_direct_response(question, intents, tool_data):
             ),
         }
 
-    # ------------------------------------------------------------
-    # Electricity direct answers
-    # ------------------------------------------------------------
     if "electricity_price_now" in intents:
         try:
             latest = query_latest_price(range_window="-7d")
@@ -539,9 +529,6 @@ def build_house_direct_response(question, intents, tool_data):
         except Exception as e:
             tool_data["cheapest_hours_today"] = {"error": str(e)}
 
-    # ------------------------------------------------------------
-    # Specific water temperature direct answers
-    # ------------------------------------------------------------
     if "water_inlet_temperature" in intents:
         try:
             data = get_water_temperature_summary()
@@ -618,9 +605,6 @@ def build_house_direct_response(question, intents, tool_data):
                 "answer": f"I found the salt tank temperature intent, but reading the data failed: {str(e)}",
             }
 
-    # ------------------------------------------------------------
-    # Pdata / OBIS direct answers
-    # ------------------------------------------------------------
     if "pdata_compare_energy" in intents:
         try:
             data = get_pdata_compare_energy_data()
@@ -783,9 +767,6 @@ def build_house_direct_response(question, intents, tool_data):
                 "answer": f"I found the Pdata summary intent, but reading the data failed: {str(e)}",
             }
 
-    # ------------------------------------------------------------
-    # Generic house-energy direct answers
-    # ------------------------------------------------------------
     if "energy_compare_today_yesterday" in intents and "energy_compare_today_yesterday" in tool_data:
         cmp_data = tool_data["energy_compare_today_yesterday"]
         today = cmp_data["today"]
@@ -806,61 +787,105 @@ def build_house_direct_response(question, intents, tool_data):
         }
 
     if "daily_energy_story" in intents and "daily_energy_story" in tool_data:
-        s = tool_data["daily_energy_story"]
-        today = s["energy_today"]
-        peak = s["power_peak_today"]
-        flow = s["import_export_status_now"]
+        try:
+            flow = energy_service.get_power_flow_summary()
+            today = tool_data["daily_energy_story"]["energy_today"]
+            peak = tool_data["daily_energy_story"]["power_peak_today"]
 
-        answer = (
-            f"Today the house imported {today['import_kwh_today']:.3f} kWh and exported "
-            f"{today['export_kwh_today']:.3f} kWh, for a net of {today['net_kwh_today']:.3f} kWh. "
-            f"The peak power today was {peak['peak_power_watts']:.2f} watts at {peak['peak_time']}. "
-            f"Right now the house is {flow['flow_status']} "
-        )
+            answer = (
+                f"Today the house imported {today['import_kwh_today']:.3f} kWh and exported "
+                f"{today['export_kwh_today']:.3f} kWh, for a net of {today['net_kwh_today']:.3f} kWh. "
+                f"The peak power today was {peak['peak_power_watts']:.2f} watts at {peak['peak_time']}. "
+            )
 
-        if flow["flow_status"] == "importing":
-            answer += f"about {flow['power_watts']:.2f} watts from the grid."
-        elif flow["flow_status"] == "exporting":
-            answer += f"about {abs(flow['power_watts']):.2f} watts to the grid."
-        else:
-            answer += "with near-zero net grid flow."
+            grid_in = flow.get("grid_import_kw")
+            grid_out = flow.get("grid_export_kw")
+            load = flow.get("estimated_house_load_kw")
+            solar = flow.get("solar_power_kw")
 
-        return {
-            "status": "ok",
-            "mode": "direct_tool",
-            "intents": intents,
-            "used_tools": ["daily_energy_story"],
-            "tool_data": tool_data,
-            "answer": answer,
-        }
+            if grid_out is not None and grid_out > 0:
+                answer += (
+                    f"Right now the house load is {_fmt_energy(load, ' kW')}, "
+                    f"solar production is {_fmt_energy(solar, ' kW')}, and "
+                    f"about {_fmt_energy(grid_out, ' kW')} is being exported."
+                )
+            else:
+                answer += (
+                    f"Right now the house load is {_fmt_energy(load, ' kW')}, "
+                    f"solar production is {_fmt_energy(solar, ' kW')}, and "
+                    f"about {_fmt_energy(grid_in, ' kW')} is being imported from the grid."
+                )
+
+            tool_data["daily_energy_story_unified_flow"] = flow
+
+            return {
+                "status": "ok",
+                "mode": "direct_tool",
+                "intents": intents,
+                "used_tools": ["daily_energy_story"],
+                "tool_data": tool_data,
+                "answer": answer,
+            }
+        except Exception as e:
+            tool_data["daily_energy_story_unified_flow"] = {"error": str(e)}
 
     if "house_overview" in intents and "house_overview" in tool_data:
-        overview = tool_data["house_overview"]
-        power = overview["power_now"]["power_watts"]
-        freq = overview["energy_summary"]["frequency_hz"]
-        pf = overview["energy_summary"]["power_factor"]
+        try:
+            overview = tool_data["house_overview"]
+            flow = energy_service.get_power_flow_summary()
 
-        phases = overview["phases"]
-        currents = {
-            "L1": phases["L1"]["current_a"],
-            "L2": phases["L2"]["current_a"],
-            "L3": phases["L3"]["current_a"],
-        }
-        max_phase = max(currents, key=currents.get)
-        max_current = currents[max_phase]
+            freq = overview["energy_summary"].get("frequency_hz")
+            pf = overview["energy_summary"].get("power_factor")
 
-        return {
-            "status": "ok",
-            "mode": "direct_tool",
-            "intents": intents,
-            "used_tools": ["house_overview"],
-            "tool_data": tool_data,
-            "answer": (
-                f"The house is currently using {power:.2f} watts. "
-                f"Grid frequency is {freq:.3f} Hz and total power factor is {pf:.3f}. "
-                f"The most loaded phase right now is {max_phase} at {max_current:.3f} A."
-            ),
-        }
+            phases = overview["phases"]
+            currents = {
+                "L1": phases["L1"]["current_a"],
+                "L2": phases["L2"]["current_a"],
+                "L3": phases["L3"]["current_a"],
+            }
+            max_phase = max(currents, key=currents.get)
+            max_current = currents[max_phase]
+
+            grid_in = flow.get("grid_import_kw")
+            grid_out = flow.get("grid_export_kw")
+            load = flow.get("estimated_house_load_kw")
+            solar = flow.get("solar_power_kw")
+            excess = flow.get("excess_energy_available_kw")
+            excess_state = flow.get("excess_energy_state")
+
+            if grid_out is not None and grid_out > 0:
+                grid_text = f"The house is exporting {_fmt_energy(grid_out, ' kW')} to the grid."
+            elif grid_in is not None and grid_in > 0:
+                grid_text = f"The house is importing {_fmt_energy(grid_in, ' kW')} from the grid."
+            else:
+                grid_text = "The house is currently near grid balance."
+
+            excess_text = ""
+            if excess is not None and excess > 0:
+                excess_text = (
+                    f" Automation-safe excess energy available is {_fmt_energy(excess, ' kW')} "
+                    f"with state {excess_state}."
+                )
+
+            tool_data["house_overview_unified_flow"] = flow
+
+            return {
+                "status": "ok",
+                "mode": "direct_tool",
+                "intents": intents,
+                "used_tools": ["house_overview"],
+                "tool_data": tool_data,
+                "answer": (
+                    f"The estimated house load is {_fmt_energy(load, ' kW')}. "
+                    f"Solar production is {_fmt_energy(solar, ' kW')}. "
+                    f"{grid_text}"
+                    f"{excess_text} "
+                    f"Grid frequency is {freq:.3f} Hz and total power factor is {pf:.3f}. "
+                    f"The most loaded phase right now is {max_phase} at {max_current:.3f} A."
+                ),
+            }
+        except Exception as e:
+            tool_data["house_overview_unified_flow"] = {"error": str(e)}
 
     if "power_peak_today" in intents and "power_peak_today" in tool_data:
         peak = tool_data["power_peak_today"]
@@ -995,25 +1020,58 @@ def build_house_direct_response(question, intents, tool_data):
             "answer": answer,
         }
 
-    if "import_export_status_now" in intents and "import_export_status_now" in tool_data:
-        s = tool_data["import_export_status_now"]
-        watts = s["power_watts"]
+    if "import_export_status_now" in intents:
+        try:
+            flow = energy_service.get_power_flow_summary()
+            tool_data["import_export_status_now_unified"] = flow
 
-        if s["flow_status"] == "importing":
-            answer = f"The house is currently importing about {watts:.2f} watts from the grid."
-        elif s["flow_status"] == "exporting":
-            answer = f"The house is currently exporting about {abs(watts):.2f} watts to the grid."
-        else:
-            answer = "The house is currently near grid balance, with almost no net import or export."
+            grid_in = flow.get("grid_import_kw")
+            grid_out = flow.get("grid_export_kw")
+            solar = flow.get("solar_power_kw")
+            load = flow.get("estimated_house_load_kw")
+            excess = flow.get("excess_energy_available_kw")
+            excess_state = flow.get("excess_energy_state")
+            reason = flow.get("excess_energy_reason")
 
-        return {
-            "status": "ok",
-            "mode": "direct_tool",
-            "intents": intents,
-            "used_tools": ["import_export_status_now"],
-            "tool_data": tool_data,
-            "answer": answer,
-        }
+            if excess is not None and excess > 0:
+                answer = (
+                    f"Yes. There is about {_fmt_energy(excess, ' kW')} of excess electricity available right now. "
+                    f"Excess energy state is {excess_state}. "
+                    f"Solar production is {_fmt_energy(solar, ' kW')}, "
+                    f"house load is {_fmt_energy(load, ' kW')}, "
+                    f"and grid export is {_fmt_energy(grid_out, ' kW')}."
+                )
+            elif grid_out is not None and grid_out > 0:
+                answer = (
+                    f"The house is exporting {_fmt_energy(grid_out, ' kW')} to the grid, "
+                    f"but automation-safe excess energy is currently effectively zero after reserve. "
+                    f"Solar production is {_fmt_energy(solar, ' kW')} and house load is "
+                    f"{_fmt_energy(load, ' kW')}."
+                )
+            elif grid_in is not None and grid_in > 0:
+                answer = (
+                    f"No. The house is importing about {_fmt_energy(grid_in, ' kW')} from the grid right now. "
+                    f"Solar production is {_fmt_energy(solar, ' kW')} and house load is "
+                    f"{_fmt_energy(load, ' kW')}."
+                )
+            else:
+                answer = (
+                    f"There is no meaningful excess electricity available right now. "
+                    f"Solar production is {_fmt_energy(solar, ' kW')}, "
+                    f"house load is {_fmt_energy(load, ' kW')}, "
+                    f"and excess reason is {reason or 'unknown'}."
+                )
+
+            return {
+                "status": "ok",
+                "mode": "direct_tool",
+                "intents": intents,
+                "used_tools": ["import_export_status_now"],
+                "tool_data": tool_data,
+                "answer": answer,
+            }
+        except Exception as e:
+            tool_data["import_export_status_now_unified"] = {"error": str(e)}
 
     if "energy_yesterday" in intents and "energy_yesterday" in tool_data:
         y = tool_data["energy_yesterday"]
@@ -1062,19 +1120,63 @@ def build_house_direct_response(question, intents, tool_data):
         }
 
     if "power_now" in intents and "power_now" in tool_data:
-        watts = tool_data["power_now"]["power_watts"]
-        return {
-            "status": "ok",
-            "mode": "direct_tool",
-            "intents": intents,
-            "used_tools": ["power_now"],
-            "tool_data": tool_data,
-            "answer": f"The house is currently using {watts:.2f} watts.",
-        }
+        try:
+            flow = energy_service.get_power_flow_summary()
+            tool_data["power_now_unified_flow"] = flow
 
-    # ------------------------------------------------------------
-    # Salt and water direct answers
-    # ------------------------------------------------------------
+            load = flow.get("estimated_house_load_kw")
+            solar = flow.get("solar_power_kw")
+            grid_in = flow.get("grid_import_kw")
+            grid_out = flow.get("grid_export_kw")
+            excess = flow.get("excess_energy_available_kw")
+            excess_state = flow.get("excess_energy_state")
+
+            if grid_out is not None and grid_out > 0:
+                grid_text = f"The house is exporting {_fmt_energy(grid_out, ' kW')} to the grid."
+            elif grid_in is not None and grid_in > 0:
+                grid_text = f"The house is importing {_fmt_energy(grid_in, ' kW')} from the grid."
+            else:
+                grid_text = "The house is currently near grid balance."
+
+            excess_text = ""
+            if excess is not None and excess > 0:
+                excess_text = (
+                    f" There is about {_fmt_energy(excess, ' kW')} of automation-safe excess energy "
+                    f"available right now, state {excess_state}."
+                )
+
+            return {
+                "status": "ok",
+                "mode": "direct_tool",
+                "intents": intents,
+                "used_tools": ["power_now"],
+                "tool_data": tool_data,
+                "answer": (
+                    f"The estimated house load is {_fmt_energy(load, ' kW')}. "
+                    f"Solar is producing {_fmt_energy(solar, ' kW')}. "
+                    f"{grid_text}"
+                    f"{excess_text}"
+                ),
+            }
+        except Exception as e:
+            tool_data["power_now_unified_flow"] = {"error": str(e)}
+            watts = tool_data["power_now"]["power_watts"]
+            kw = watts / 1000.0
+
+            if kw < 0:
+                answer = f"The meter currently shows net export of {abs(kw):.2f} kilowatts."
+            else:
+                answer = f"The meter currently shows net import of {kw:.2f} kilowatts."
+
+            return {
+                "status": "ok",
+                "mode": "direct_tool",
+                "intents": intents,
+                "used_tools": ["power_now"],
+                "tool_data": tool_data,
+                "answer": answer,
+            }
+
     if "salt_tank_level" in intents:
         try:
             data = get_salt_tank_level()
