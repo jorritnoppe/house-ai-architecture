@@ -422,65 +422,160 @@ def _fmt(value, unit=""):
     except Exception:
         return str(value)
 
+def _human_room_label(name: str) -> str:
+    raw = str(name or "").strip()
+    if not raw:
+        return "unknown room"
+
+    aliases = {
+        "masterbedroom": "master bedroom",
+        "deskroom": "desk room",
+        "entranceroom": "entrance room",
+        "livingroom": "living room",
+        "childroom": "child room",
+        "bathroom": "bathroom",
+        "attickroom": "attic room",
+        "iotroom": "iot room",
+        "hallwayroom": "hallway",
+        "storageroom": "storage room",
+        "kitchenroom": "kitchen",
+        "wcroom": "WC",
+        "powerroom": "power room",
+        "terrasroom": "terrace",
+        "trapbeneden": "downstairs stairs",
+        "not assigned": "not assigned",
+        "unknown": "unknown",
+    }
+    return aliases.get(raw.lower(), raw.replace("_", " "))
+
+
+def _is_noise_room(name: str) -> bool:
+    room = str(name or "").strip().lower()
+    return room in {"not assigned", "unknown", ""}
+
+
+def _join_natural(items):
+    items = [str(x).strip() for x in items if str(x).strip()]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def _summarize_service_warnings(services: dict) -> list[str]:
+    warning_nodes = []
+    offline_nodes = []
+
+    for node_name, item in (services or {}).items():
+        overall = str(item.get("overall_status") or "").lower()
+        if overall == "warning":
+            warning_nodes.append(node_name)
+        elif overall in {"error", "offline", "offline_or_error"}:
+            offline_nodes.append(node_name)
+
+    parts = []
+    if warning_nodes:
+        parts.append(f"Service warnings exist on {_join_natural(warning_nodes)}.")
+    if offline_nodes:
+        parts.append(f"Offline or error service nodes: {_join_natural(offline_nodes)}.")
+    return parts
+
+
 
 def _summarize_house_state(data: dict, action: dict) -> str:
     summary = data.get("summary", {}) or {}
     power_watts = summary.get("current_power_watts")
-    crypto_total = summary.get("crypto_total_value")
     telemetry_rooms_seen = summary.get("telemetry_rooms_seen")
-    voice_nodes_online = summary.get("voice_nodes_online")
 
     nodes_health = ((data.get("nodes_health") or {}).get("data") or {})
-    warning_nodes = [name for name, item in nodes_health.items() if item.get("status") == "warning"]
+    warning_nodes = []
+    offline_nodes = []
+
+    for node_name, item in nodes_health.items():
+        status = str(item.get("status") or "").lower()
+        if status == "warning":
+            warning_nodes.append(node_name)
+        elif status not in {"ok", ""}:
+            offline_nodes.append(node_name)
 
     services = data.get("services", {}) or {}
-    service_warning_nodes = [
-        name for name, item in services.items()
-        if item.get("overall_status") not in {"ok", None}
-    ]
+    service_parts = _summarize_service_warnings(services)
 
     audio_effective = (((data.get("audio") or {}).get("effective")) or {})
     audio_active = audio_effective.get("active")
     audio_room = audio_effective.get("effective_target_room")
+
+    telemetry = data.get("telemetry", {}) or {}
+    telemetry_items = telemetry.get("items", []) or []
+
+    grouped = {}
+    for item in telemetry_items:
+        room_name = item.get("room")
+        if not room_name or _is_noise_room(room_name):
+            continue
+        grouped.setdefault(room_name, {})
+        grouped[room_name][item.get("state_key")] = item.get("value")
+
+    climate_preview = []
+    for room_name in sorted(grouped.keys())[:3]:
+        temp = grouped[room_name].get("tempActual")
+        hum = grouped[room_name].get("humidityActual")
+
+        sub = [_human_room_label(room_name)]
+        if temp is not None:
+            sub.append(f"{round(float(temp), 1)} C")
+        if hum is not None:
+            sub.append(f"{round(float(hum), 1)} percent humidity")
+
+        if len(sub) > 1:
+            climate_preview.append(", ".join(sub))
 
     parts = []
 
     if power_watts is not None:
         try:
             kw = round(float(power_watts) / 1000.0, 2)
-            if kw >= 0:
-                parts.append(f"The house is currently using {kw} kilowatts.")
-            else:
-                parts.append(f"The house is currently exporting {abs(kw)} kilowatts.")
+            parts.append(f"The house is currently using {kw} kilowatts.")
         except Exception:
-            parts.append(f"Current power is {power_watts} watts.")
+            parts.append(f"Current house power is {power_watts} watts.")
 
-    if telemetry_rooms_seen is not None:
-        parts.append(f"I have recent climate telemetry for {telemetry_rooms_seen} rooms.")
+    if telemetry_rooms_seen:
+        if climate_preview:
+            parts.append(
+                f"Temperatures are stable across the house. For example: {'; '.join(climate_preview)}."
+            )
+        else:
+            parts.append("Temperature data is available but no clear summary could be generated.")
 
-    if crypto_total is not None:
-        parts.append(f"Your crypto portfolio is worth {round(float(crypto_total), 2)}.")
 
     if warning_nodes:
-        parts.append(f"Node warnings detected on {', '.join(warning_nodes)}.")
-    else:
-        parts.append("No node health warnings are currently active.")
+        parts.append(f"Node warnings detected on {_join_natural(warning_nodes)}.")
+    if offline_nodes:
+        parts.append(f"Offline or error nodes: {_join_natural(offline_nodes)}.")
 
-    if service_warning_nodes:
-        parts.append(f"Service warnings exist on {', '.join(service_warning_nodes)}.")
+
+
+    if not warning_nodes and not offline_nodes:
+        parts.append("All monitored nodes are operating normally.")
+
+
+    parts.extend(service_parts)
 
     if audio_active:
         if audio_room:
-            parts.append(f"Audio playback is currently active for {audio_room}.")
+            parts.append(f"Audio playback is currently active in {_human_room_label(audio_room)}.")
         else:
             parts.append("Audio playback is currently active.")
     else:
         parts.append("No audio playback is currently active.")
 
-    if voice_nodes_online is not None:
-        parts.append(f"Voice nodes online: {voice_nodes_online}.")
-
     return " ".join(parts)
+
+
+
 
 
 def _summarize_history_presence(data: dict, action: dict) -> str:
@@ -654,28 +749,120 @@ def _summarize_history_room_activity(data: dict, action: dict) -> str:
             return f"I found no room activity summary for {room} in the last {minutes} minutes."
         return f"I found no room activity in the last {minutes} minutes."
 
+    def score_item(item: dict) -> tuple:
+        room_name = str(item.get("room") or "")
+        if _is_noise_room(room_name):
+            room_penalty = -100
+        else:
+            room_penalty = 0
+
+        on_items = item.get("on_items", []) or []
+
+        presence_count = 0
+        access_count = 0
+        security_count = 0
+        heating_count = 0
+        power_count = 0
+        other_count = 0
+
+        for sub in on_items:
+            domain = str(sub.get("domain") or "").lower()
+            control_name = str(sub.get("control_name") or "").lower()
+
+            if domain == "presence":
+                presence_count += 1
+            elif domain == "access":
+                access_count += 1
+            elif domain == "security":
+                security_count += 1
+            elif domain == "heating":
+                heating_count += 1
+            elif domain == "power":
+                if any(x in control_name for x in ["picore", "psu_switch", "power_switch"]):
+                    power_count += 1
+                else:
+                    other_count += 1
+            else:
+                other_count += 1
+
+        activity_score = (
+            presence_count * 100
+            + access_count * 60
+            + security_count * 50
+            + heating_count * 20
+            + other_count * 15
+            + max(0, item.get("binary_on_count", 0) - power_count) * 10
+            + item.get("telemetry_count", 0) * 0.1
+            + room_penalty
+        )
+
+        return (
+            activity_score,
+            presence_count,
+            access_count,
+            security_count,
+            item.get("binary_on_count", 0),
+            item.get("telemetry_count", 0),
+        )
+
+    filtered_items = []
+    for item in items:
+        room_name = str(item.get("room") or "")
+        if _is_noise_room(room_name):
+            continue
+        filtered_items.append(item)
+
     if room:
-        first = items[0]
+        first = filtered_items[0] if filtered_items else items[0]
         active_count = first.get("binary_on_count", 0)
         state_count = first.get("binary_state_count", 0)
         latest_time = first.get("latest_time") or "unknown time"
+
+        presence_now = 0
+        on_items = first.get("on_items", []) or []
+        for sub in on_items:
+            if str(sub.get("domain") or "").lower() == "presence":
+                presence_now += 1
+
+        if presence_now > 0:
+            return (
+                f"I summarized activity for {_human_room_label(room)} over the last {minutes} minutes. "
+                f"There is active presence there now. "
+                f"It has {active_count} active items out of {state_count} tracked binary states. "
+                f"Latest activity was at {latest_time}."
+            )
+
         return (
-            f"I summarized activity for {room} over the last {minutes} minutes. "
+            f"I summarized activity for {_human_room_label(room)} over the last {minutes} minutes. "
             f"It has {active_count} active items out of {state_count} tracked binary states. "
             f"Latest activity was at {latest_time}."
         )
 
-    preview = []
-    for item in items[:5]:
-        room_name = item.get("room") or "unknown room"
-        active_count = item.get("binary_on_count", 0)
-        state_count = item.get("binary_state_count", 0)
-        preview.append(f"{room_name}: {active_count} active of {state_count}")
+    ranked = sorted(filtered_items, key=score_item, reverse=True)
+    top_rooms = [_human_room_label(item.get("room")) for item in ranked[:5]]
 
-    return (
-        f"I summarized room activity for {room_count} rooms over the last {minutes} minutes. "
-        f"Examples: {'; '.join(preview)}."
-    )
+    active_presence_rooms = []
+    for item in ranked:
+        room_name = item.get("room")
+        on_items = item.get("on_items", []) or []
+        if any(str(sub.get("domain") or "").lower() == "presence" for sub in on_items):
+            active_presence_rooms.append(_human_room_label(room_name))
+
+    active_presence_rooms = active_presence_rooms[:5]
+
+    parts = [
+        f"I summarized room activity for {room_count} rooms over the last {minutes} minutes."
+    ]
+
+    if top_rooms:
+        parts.append(f"Most active rooms were {_join_natural(top_rooms)}.")
+
+    if active_presence_rooms:
+        parts.append(f"Active presence is currently detected in {_join_natural(active_presence_rooms)}.")
+
+    return " ".join(parts)
+
+
 
 
 def _summarize_history_last_change(data: dict, action: dict) -> str:
