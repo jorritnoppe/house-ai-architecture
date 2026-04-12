@@ -1,21 +1,52 @@
-{
-  "version": "2026-03-27",
-  "notes": [
-    "Review routes may be used when user intent is clear, but they are not default autonomous safe routes.",
-    "These routes can affect speakers, playback state, or house behavior."
-  ],
-  "routes": [
-    "/tools/audio/announce",
-    "/tools/music/living/on",
-    "/tools/music/living/off",
-    "/tools/music/toilet/on",
-    "/tools/music/toilet/off",
-    "/tools/music/party/on",
-    "/tools/music/party/off",
-    "/tools/music/reset",
-    "/tools/audio/node_power/<state>",
-    "/ai/audio_timing_run",
-    "/tools/audio/announce",
-    "/ai/audio_timing_run"
-  ]
-}
+[
+  {
+    "path": "/ai/loxone_audio_action_map",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_audio_behavior_map",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_audio_control_candidates",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_audio_controls_by_room",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_controls_by_category",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_controls_by_room",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_lighting_controls_by_room",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_room_summary",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_room_temperature",
+    "classification": "review_required",
+    "risk": "medium"
+  },
+  {
+    "path": "/ai/loxone_structure_summary",
+    "classification": "review_required",
+    "risk": "medium"
+  }
+]

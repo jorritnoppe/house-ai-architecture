@@ -1,15 +1,12 @@
-{
-  "version": "2026-03-27",
-  "notes": [
-    "Blocked tools must not be autonomously used by the house AI.",
-    "These are either unsafe, too powerful, or not yet approved."
-  ],
-  "tools": [
-    "network_scan",
-    "raw_device_http",
-    "raw_loxone_write",
-    "experimental_tool_execution_unapproved",
-    "agent_recursive_self_call",
-    "shell_command_execution"
-  ]
-}
+[
+  {
+    "tool_name": "network_scan",
+    "file": "tools/network_scan.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "valid_test_tool",
+    "file": "tools/valid_test_tool.py",
+    "entrypoint": "run(args)"
+  }
+]

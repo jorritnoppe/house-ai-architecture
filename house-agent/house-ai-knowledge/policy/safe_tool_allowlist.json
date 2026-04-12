@@ -1,13 +1,182 @@
-{
-  "version": "2026-03-27",
-  "notes": [
-    "Safe tools should be read-oriented or low-risk helpers with no uncontrolled physical side effects."
-  ],
-  "tools": [
-    "power_current",
-    "climate_latest",
-    "telemetry_summary",
-    "energy_summary",
-    "house_status"
-  ]
-}
+[
+  {
+    "tool_name": "apc_battery_health",
+    "file": "tools/apc_battery_health.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "apc_highest_load",
+    "file": "tools/apc_highest_load.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "apc_lowest_runtime",
+    "file": "tools/apc_lowest_runtime.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "apc_on_battery_status",
+    "file": "tools/apc_on_battery_status.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "apc_summary",
+    "file": "tools/apc_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_boiler_health_summary",
+    "file": "tools/buderus_boiler_health_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_current_status",
+    "file": "tools/buderus_current_status.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_diagnostics",
+    "file": "tools/buderus_diagnostics.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_heating_status",
+    "file": "tools/buderus_heating_status.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_hot_water_status",
+    "file": "tools/buderus_hot_water_status.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "buderus_pressure_analysis",
+    "file": "tools/buderus_pressure_analysis.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "cheapest_hours_today",
+    "file": "tools/cheapest_hours_today.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_coin_summary",
+    "file": "tools/crypto_coin_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_compare_7d",
+    "file": "tools/crypto_compare_7d.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_compare_now_vs_24h",
+    "file": "tools/crypto_compare_now_vs_24h.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_concentration_risk",
+    "file": "tools/crypto_concentration_risk.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_contributors_24h",
+    "file": "tools/crypto_contributors_24h.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_daily_pnl_summary",
+    "file": "tools/crypto_daily_pnl_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_drawdown_7d",
+    "file": "tools/crypto_drawdown_7d.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_excluding_symbol_summary",
+    "file": "tools/crypto_excluding_symbol_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_portfolio_health",
+    "file": "tools/crypto_portfolio_health.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_portfolio_summary",
+    "file": "tools/crypto_portfolio_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_stale_data_check",
+    "file": "tools/crypto_stale_data_check.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "crypto_top_movers_24h",
+    "file": "tools/crypto_top_movers_24h.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "electricity_cost_last_24h",
+    "file": "tools/electricity_cost_last_24h.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "electricity_cost_today",
+    "file": "tools/electricity_cost_today.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "latest_price",
+    "file": "tools/latest_price.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "pdata_all_fields",
+    "file": "tools/pdata_all_fields.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "pdata_compare_energy",
+    "file": "tools/pdata_compare_energy.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "pdata_energy_summary",
+    "file": "tools/pdata_energy_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "pdata_full_overview",
+    "file": "tools/pdata_full_overview.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "pdata_gas_summary",
+    "file": "tools/pdata_gas_summary.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "salt_tank_level",
+    "file": "tools/salt_tank_level.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "sma",
+    "file": "tools/sma.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "water_softener_overview",
+    "file": "tools/water_softener_overview.py",
+    "entrypoint": "run(args)"
+  },
+  {
+    "tool_name": "water_temperature_summary",
+    "file": "tools/water_temperature_summary.py",
+    "entrypoint": "run(args)"
+  }
+]

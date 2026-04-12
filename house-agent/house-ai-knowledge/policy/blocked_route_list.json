@@ -1,14 +1,192 @@
-{
-  "version": "2026-03-27",
-  "notes": [
-    "Blocked routes must not be called autonomously by the AI.",
-    "This includes recursive agent entrypoints and routes that bypass protected control paths."
-  ],
-  "routes": [
-    "/agent/query",
-    "/tools/audio/switch_raw",
-    "/tools/audio/relay_raw",
-    "/tools/experimental/execute",
-    "/tools/network_scan"
-  ]
-}
+[
+  {
+    "path": "/agent/query",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/experimental-tools/execute",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/<speaker>",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/all",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/default",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/last",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/living",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speak/wc",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/house/speaker/<speaker>/test",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/approve",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/install-missing-packages",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/preflight",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/promote",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/promote-to-production",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/reject",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/<proposal_id>/validate",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/analyze-dependencies",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/generate",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/install-package",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/install-plan",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/proposed-tools/save",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/status/announce",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/tools/audio/node_power/<state>",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/tools/audio/party/<state>",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/tools/audio/playback/<state>",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/tools/audio/speaker_route/<state>",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/tools/execute",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/v1/chat/completions",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/announce",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/announce_once",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/player_action",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/process-last",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/query-last",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/say",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/stop",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/transcribe-last",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/upload",
+    "classification": "blocked",
+    "risk": "high"
+  },
+  {
+    "path": "/voice/volume",
+    "classification": "blocked",
+    "risk": "high"
+  }
+]
