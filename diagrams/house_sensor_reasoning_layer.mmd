@@ -1,0 +1,40 @@
+flowchart TD
+    A[User question] --> B[POST /agent/query]
+    B --> C[services/agent_router_bridge.py]
+    C --> D[_match_safe_action]
+
+    D -->|house sensor query matched| E[execute_safe_action]
+    E --> F[/ai/house_sensors]
+
+    F --> G[_enrich_house_sensor_payload_with_activity_reasons]
+
+    G --> H[_analyze_room_activity_reason]
+    H --> I[_extract_room_signals]
+    H --> J[_infer_activity_reason]
+    H --> K[_build_primary_reason_summary]
+    H --> L[_build_reason_details]
+
+    G --> M[_score_room_intelligence]
+    M --> M1[human_activity_score]
+    M --> M2[occupancy_confidence]
+    M --> M3[automation_noise_likelihood]
+
+    G --> N[_summarize_house_sensors]
+    N --> O[_build_ranked_room_intelligence]
+    O --> P[_filter_human_likely_rooms]
+    O --> Q[_filter_background_like_rooms]
+
+    N --> R[Answer synthesis]
+
+    R --> R1[Which room is most active?]
+    R --> R2[Which rooms were recently used by a person?]
+    R --> R3[Which rooms are probably just background automation?]
+    R --> R4[Why is the kitchen active?]
+    R --> R5[What is happening in the living room?]
+
+    style A fill:#dfefff,stroke:#4a6fa5
+    style B fill:#dfefff,stroke:#4a6fa5
+    style C fill:#fff2cc,stroke:#b38f00
+    style F fill:#e2f0d9,stroke:#5a8f3d
+    style G fill:#fce5cd,stroke:#c27c0e
+    style N fill:#f4cccc,stroke:#a64d4d

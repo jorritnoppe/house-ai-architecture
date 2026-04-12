@@ -1,0 +1,61 @@
+HOUSE AI PROJECT CONTINUATION — SENSOR REASONING LAYER (April 12 2026)
+
+We were working on my local House AI stack:
+- Ubuntu AI server
+- RTX 3060
+- Ollama
+- Open WebUI
+- Flask house-agent API
+- InfluxDB
+- Loxone / Raspberry Pi / PLC integrations
+
+Latest focus was the live file:
+~/house-agent/services/agent_router_bridge.py
+
+We extended the /ai/house_sensors summarization path so the agent can distinguish between:
+- truly occupied rooms
+- likely recent human activity
+- background automation / climate noise
+- strongest currently active room
+- room-specific activity explanations
+
+The runtime now enriches each room payload with:
+- activity_reason
+- activity_reason_primary
+- activity_reason_secondary
+- activity_reason_confidence
+- human_activity_score
+- occupancy_confidence
+- automation_noise_likelihood
+
+Main logic pieces added/refined:
+- _analyze_room_activity_reason(...)
+- _score_room_intelligence(...)
+- _enrich_house_sensor_payload_with_activity_reasons(...)
+- _build_ranked_room_intelligence(...)
+- _filter_human_likely_rooms(...)
+- _filter_background_like_rooms(...)
+- expanded _summarize_house_sensors(...)
+- ensured /ai/house_sensors payload gets enriched before final answer rendering
+
+Validated working queries:
+- Which rooms are probably just background automation?
+- Which rooms were recently used by a person?
+- Which room is most active?
+- What is happening in the living room?
+- Why is the kitchen active?
+
+Observed good outputs included:
+- background automation: living room, child room, IoT room, storage room, WC
+- recent human activity: attic room, bathroom, desk room, hallway
+- most active room: attic room with primary reason presence
+
+Important preference:
+When the file gets messy, provide full-file or full-function replacements directly instead of tiny fragmented edits.
+
+Next best steps:
+1. tighten recency handling so old bathroom/hallway activity decays faster
+2. improve heuristics for music / speaker / automation-caused false room activity
+3. add optional room-role weighting
+4. maybe add a small dashboard / visual inspection layer for these room intelligence fields
+5. keep the public repo documentation in sync with a diagram and summary of this layer
