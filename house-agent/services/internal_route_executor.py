@@ -22,6 +22,7 @@ from services.house_state_service import get_house_state
 from services.unified_playback_state_service import get_unified_playback_state
 
 from services.energy_service import energy_service
+from services.house_sensors_service import get_house_sensors
 
 
 
@@ -212,6 +213,11 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
 
     if path == "/ai/playback_state":
         return get_unified_playback_state(cooldown_seconds=2)
+
+    if path == "/ai/house_sensors":
+        minutes = int((params or {}).get("minutes", 60))
+        limit = int((params or {}).get("limit", 8000))
+        return get_house_sensors(minutes=minutes, limit=limit)
 
     if path == "/ai/house_state":
         return get_house_state()

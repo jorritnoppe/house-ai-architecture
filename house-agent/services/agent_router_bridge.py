@@ -338,6 +338,46 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         return {"type": "route", "target": "/ai/unified_energy_summary"}
 
 
+    if any(x in q for x in [
+        "which rooms are occupied",
+        "what rooms are occupied",
+        "which rooms are active",
+        "what rooms are active",
+        "occupied right now",
+        "room occupancy",
+        "occupancy",
+        "house sensors",
+        "house sensor",
+        "sensor overview",
+        "sensor state",
+        "room activity",
+        "is anyone home",
+        "is anyone in the",
+        "is the living room occupied",
+        "is the bathroom occupied",
+        "is the desk room occupied",
+        "is the deskroom occupied",
+        "is the entrance room occupied",
+        "is the entrance occupied",
+        "lights on",
+        "which lights are on",
+        "what lights are on",
+        "active lights",
+        "lighting active",
+        "active motion",
+        "where is motion",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_sensors",
+            "params": {
+                "minutes": 60,
+                "limit": 8000,
+            },
+            "reason": "house_sensor_occupancy_query",
+        }
+
+
     history_route = route_history_question(question)
     if history_route and history_route.get("status") == "ok" and history_route.get("target"):
         return {
@@ -587,6 +627,113 @@ def _summarize_house_state(data: dict, action: dict) -> str:
     return "The house state is available, but no concise overview could be generated."
 
 
+def _summarize_house_sensors(data: dict, action: dict, question: str = "") -> str:
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        return "I could not read the current house sensor state."
+
+    summary = data.get("summary") or {}
+    rooms = data.get("rooms") or []
+
+    occupied_rooms = summary.get("occupied_rooms") or summary.get("presence_active_rooms") or []
+    lighting_active_rooms = summary.get("lighting_active_rooms") or []
+    motion_active_rooms = summary.get("motion_active_rooms") or []
+
+    q = str(question or "").strip().lower()
+
+    def _find_room_entry(question_text: str):
+        for item in rooms:
+            room_name = str(item.get("room") or "").strip()
+            if not room_name:
+                continue
+
+            human = _human_room_label(room_name).lower()
+            variants = {
+                room_name.lower(),
+                human,
+                human.replace(" room", ""),
+                room_name.lower().replace("room", ""),
+            }
+
+            if any(v and v in question_text for v in variants):
+                return item
+        return None
+
+    def _join_room_labels(items):
+        return _join_natural([_human_room_label(x) for x in items if x])
+
+    room_entry = _find_room_entry(q)
+
+    if room_entry:
+        room_label = _human_room_label(room_entry.get("room"))
+        room_status = room_entry.get("room_status") or "unknown"
+        lighting = room_entry.get("lighting") or {}
+        climate = room_entry.get("climate") or {}
+
+        if "occupied" in q or "presence" in q or "anyone in" in q:
+            if room_status == "occupied":
+                return f"The {room_label} currently appears occupied."
+            if room_status == "idle":
+                return f"The {room_label} currently appears idle."
+            if room_status == "active_no_presence":
+                return f"The {room_label} shows some activity, but no active presence right now."
+            return f"I do not have a strong occupancy signal for the {room_label} right now."
+
+        if "light" in q or "lighting" in q:
+            if lighting.get("is_on"):
+                return f"Lights currently appear active in the {room_label}."
+            return f"I do not currently see active lighting in the {room_label}."
+
+        if "temperature" in q or "climate" in q:
+            temp = climate.get("temperature_actual")
+            humidity = climate.get("humidity")
+            if temp is not None and humidity is not None:
+                return f"The {room_label} is about {temp:.1f} degrees with {humidity:.1f} percent humidity."
+            if temp is not None:
+                return f"The {room_label} is about {temp:.1f} degrees right now."
+            return f"I do not have climate data for the {room_label} right now."
+
+    if "light" in q or "lighting" in q:
+        if lighting_active_rooms:
+            return f"Lights appear active in {_join_room_labels(lighting_active_rooms)}."
+        return "I do not currently see any active lights."
+
+    if "motion" in q:
+        if motion_active_rooms:
+            return f"Motion is currently active in {_join_room_labels(motion_active_rooms)}."
+        return "I do not currently see any active motion."
+
+    if (
+        "occupied" in q
+        or "occupancy" in q
+        or "which rooms are active" in q
+        or "active rooms" in q
+        or "is anyone home" in q
+        or "presence" in q
+    ):
+        if occupied_rooms:
+            return f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}."
+        return "I do not see any occupied rooms right now."
+
+    if "house sensors" in q or "sensor" in q or "room activity" in q:
+        parts = []
+
+        if occupied_rooms:
+            parts.append(f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}.")
+        else:
+            parts.append("I do not see any occupied rooms right now.")
+
+        if lighting_active_rooms:
+            parts.append(f"Lights appear active in {_join_room_labels(lighting_active_rooms)}.")
+
+        if motion_active_rooms:
+            parts.append(f"Motion is currently active in {_join_room_labels(motion_active_rooms)}.")
+
+        return " ".join(parts)
+
+    if occupied_rooms:
+        return f"Occupied rooms right now are {_join_room_labels(occupied_rooms)}."
+
+    return "I do not see any occupied rooms right now."
 
 
 
@@ -1042,6 +1189,11 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
 
     if target == "/ai/house_state":
         return _summarize_house_state(data, action)
+
+
+    if target == "/ai/house_sensors":
+        return _summarize_house_sensors(data, action, question=question)
+
 
     if target == "/ai/playback_state":
         effective = data.get("effective", {}) if isinstance(data, dict) else {}
