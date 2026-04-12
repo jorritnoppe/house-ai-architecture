@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from extensions import sma_tools
+from services.energy_service import energy_service
 from services.influx_helpers import iso_now
 from services.power_service import (
     get_power_now_data,
@@ -147,9 +147,14 @@ def _build_house_alerts(water: dict) -> list[dict]:
 def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
     lines: list[str] = []
 
-    power_now = (((facts.get("power_now") or {}).get("power_watts")))
-    if power_now is not None:
-        lines.append(f"The house is currently using {round(float(power_now) / 1000.0, 1)} kilowatts.")
+    energy_flow = facts.get("energy_flow") or {}
+    house_load_kw = energy_flow.get("estimated_house_load_kw")
+    solar_power_kw = energy_flow.get("solar_power_kw")
+    grid_import_kw = energy_flow.get("grid_import_kw")
+    grid_export_kw = energy_flow.get("grid_export_kw")
+
+    if house_load_kw is not None:
+        lines.append(f"The house is currently using {round(float(house_load_kw), 2)} kilowatts.")
 
     if mode == "today":
         energy_today = facts.get("energy_today") or {}
@@ -179,10 +184,13 @@ def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
         if price_value is not None:
             lines.append(f"The current electricity price is {round(float(price_value), 3)} euro per kilowatt hour.")
 
-        solar_now = facts.get("solar_now") or {}
-        solar_power_kw = solar_now.get("ac_power_kw")
         if solar_power_kw is not None:
             lines.append(f"Solar power is currently {round(float(solar_power_kw), 2)} kilowatts.")
+
+        if grid_export_kw is not None and float(grid_export_kw) > 0:
+            lines.append(f"The house is currently exporting {round(float(grid_export_kw), 2)} kilowatts to the grid.")
+        elif grid_import_kw is not None:
+            lines.append(f"The house is currently importing {round(float(grid_import_kw), 2)} kilowatts from the grid.")
 
     water_softener = facts.get("water_softener") or {}
     flow = water_softener.get("flow") or {}
@@ -224,15 +232,18 @@ def _build_brief_lines(facts: dict, mode: str = "today") -> list[str]:
 def get_house_facts_now() -> Dict[str, object]:
     power_now = _safe_call(get_power_now_data)
     energy_summary = _safe_call(get_energy_summary_data)
+    energy_snapshot = _safe_call(energy_service.get_live_snapshot)
+    energy_flow = _safe_call(energy_service.get_power_flow_summary)
     latest_price = _safe_call(lambda: query_latest_price(range_window="-7d"), fallback={"status": "no_data"})
     water = _safe_call(get_water_softener_overview)
     apc = _safe_call(get_apc_summary_data)
     loxone_recent = _summarize_loxone_recent(minutes=180)
 
-    try:
-        solar = sma_tools.get_production_overview()
-    except Exception as exc:
-        solar = {"status": "error", "message": str(exc)}
+    solar_now = {}
+    if energy_snapshot.get("status") in {"ok", "partial", "degraded"}:
+        solar_now = energy_snapshot.get("sma", {}) or {}
+    if not solar_now:
+        solar_now = {"status": "error", "message": "No unified solar snapshot available"}
 
     return {
         "status": "ok",
@@ -240,11 +251,13 @@ def get_house_facts_now() -> Dict[str, object]:
         "source_map_keys": sorted(list(INFLUX_SOURCE_MAP.keys())),
         "power_now": power_now,
         "energy_summary": energy_summary,
+        "energy_snapshot": energy_snapshot,
+        "energy_flow": energy_flow,
         "electricity_price_now": {
             "status": "ok" if latest_price else "no_data",
             "data": latest_price,
         },
-        "solar_now": solar,
+        "solar_now": solar_now,
         "water_softener": water,
         "ups": apc,
         "loxone_recent_activity": {
@@ -259,15 +272,19 @@ def get_house_facts_now() -> Dict[str, object]:
 def get_house_facts_today() -> Dict[str, object]:
     power_now = _safe_call(get_power_now_data)
     energy_today = _safe_call(get_energy_today_data)
+    energy_summary = _safe_call(get_energy_summary_data)
+    energy_snapshot = _safe_call(energy_service.get_live_snapshot)
+    energy_flow = _safe_call(energy_service.get_power_flow_summary)
     cost_today = _safe_call(get_electricity_cost_today)
     water = _safe_call(get_water_softener_overview)
     apc = _safe_call(get_apc_summary_data)
     loxone_recent = _summarize_loxone_recent(minutes=1440)
 
-    try:
-        solar = sma_tools.get_production_overview()
-    except Exception as exc:
-        solar = {"status": "error", "message": str(exc)}
+    solar_today = {}
+    if energy_snapshot.get("status") in {"ok", "partial", "degraded"}:
+        solar_today = energy_snapshot.get("sma", {}) or {}
+    if not solar_today:
+        solar_today = {"status": "error", "message": "No unified solar snapshot available"}
 
     alerts = _build_house_alerts(water)
 
@@ -276,9 +293,12 @@ def get_house_facts_today() -> Dict[str, object]:
         "timestamp": iso_now(),
         "source_map_keys": sorted(list(INFLUX_SOURCE_MAP.keys())),
         "power_now": power_now,
+        "energy_summary": energy_summary,
+        "energy_snapshot": energy_snapshot,
+        "energy_flow": energy_flow,
         "energy_today": energy_today,
         "electricity_cost_today": cost_today,
-        "solar_today": solar,
+        "solar_today": solar_today,
         "water_softener": water,
         "ups": apc,
         "loxone_activity_today": {
