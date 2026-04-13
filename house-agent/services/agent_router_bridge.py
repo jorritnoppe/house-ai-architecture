@@ -1090,129 +1090,6 @@ def _get_room_activity_reason(room: dict) -> dict:
     return analysis.get("activity_reason", {})
 
 
-def _score_room_intelligence(room_name, room_payload, now_ts=None):
-    """
-    Compute room intelligence from real nested room payload + SQLite memory.
-    """
-    normalized = _extract_room_signal_snapshot(room_name, room_payload)
-    profile = _get_room_role_profile(room_name, normalized)
-    recency = _build_room_recency_snapshot(room_name, normalized, now_ts=now_ts)
-    reason_info = _analyze_room_activity_reason(room_name, room_payload, now_ts=now_ts)
-
-    presence = _safe_bool(normalized.get("presence"))
-    motion = _safe_bool(normalized.get("motion"))
-    lights_on = _safe_bool(normalized.get("lights_on"))
-    access_active = _safe_bool(normalized.get("access_active"))
-    climate_active = _safe_bool(normalized.get("climate_active"))
-
-    base_score = 0.0
-
-    if presence:
-        base_score += 65.0 * profile["presence_weight"]
-    else:
-        if recency["presence_decay_factor"] > 0.60 and recency["presence_age_seconds"] is not None:
-            base_score += 18.0 * profile["presence_weight"] * recency["presence_decay_factor"]
-
-    if motion:
-        base_score += 24.0 * profile["motion_weight"]
-    else:
-        if recency["motion_age_seconds"] is not None:
-            base_score += 14.0 * profile["motion_weight"] * recency["motion_decay_factor"]
-
-    if lights_on:
-        base_score += 10.0 * profile["light_weight"]
-    else:
-        if recency["light_age_seconds"] is not None and recency["light_decay_factor"] > 0.55:
-            base_score += 4.0 * profile["light_weight"] * recency["light_decay_factor"]
-
-    if access_active:
-        base_score += 8.0 * profile["access_weight"]
-    else:
-        if recency["access_age_seconds"] is not None and recency["access_decay_factor"] > 0.60:
-            base_score += 3.0 * profile["access_weight"] * recency["access_decay_factor"]
-
-    if climate_active:
-        base_score += 4.0 * profile["climate_weight"]
-    else:
-        if recency["climate_age_seconds"] is not None and recency["climate_decay_factor"] > 0.65:
-            base_score += 2.0 * profile["climate_weight"] * recency["climate_decay_factor"]
-
-    if _safe_bool(normalized.get("has_any_sensor_data")):
-        base_score += 2.0
-
-    base_score += profile["human_bias"]
-
-    if access_active and not presence and not motion:
-        base_score -= 8.0
-
-    if climate_active and not presence and not motion and not lights_on:
-        base_score -= 10.0
-
-    if lights_on and not presence and not motion and not access_active:
-        base_score -= 6.0
-
-    if recency["recency_band"] == "stale" and not presence:
-        base_score *= 0.75
-
-    score = int(round(max(0.0, min(100.0, base_score))))
-
-    if presence and score >= 65:
-        occupancy_confidence = "high"
-    elif score >= 35:
-        occupancy_confidence = "medium"
-    else:
-        occupancy_confidence = "low"
-
-    noise_score = 0
-
-    if climate_active:
-        noise_score += 28
-    elif recency["climate_decay_factor"] > 0.60 and recency["climate_age_seconds"] is not None:
-        noise_score += 16
-
-    if lights_on and not presence and not motion:
-        noise_score += 18
-    if access_active and not presence and not motion:
-        noise_score += 14
-    if profile["role"] in {"utility", "transitional"}:
-        noise_score += 18
-    if recency["recency_band"] == "stale":
-        noise_score += 16
-    if presence:
-        noise_score -= 40
-    if motion and recency["motion_recency_band"] == "fresh":
-        noise_score -= 20
-
-    noise_score += profile["noise_bias"]
-    noise_score = max(0, min(100, noise_score))
-
-    if noise_score >= 55:
-        automation_noise_likelihood = "high"
-    elif noise_score >= 28:
-        automation_noise_likelihood = "medium"
-    else:
-        automation_noise_likelihood = "low"
-
-    result = {
-        "room_role": profile["role"],
-        "recency_band": recency["recency_band"],
-        "latest_activity_age_seconds": recency["latest_activity_age_seconds"],
-        "presence_age_seconds": recency["presence_age_seconds"],
-        "motion_age_seconds": recency["motion_age_seconds"],
-        "light_age_seconds": recency["light_age_seconds"],
-        "access_age_seconds": recency["access_age_seconds"],
-        "climate_age_seconds": recency["climate_age_seconds"],
-        "presence_decay_factor": recency["presence_decay_factor"],
-        "motion_decay_factor": recency["motion_decay_factor"],
-        "light_decay_factor": recency["light_decay_factor"],
-        "access_decay_factor": recency["access_decay_factor"],
-        "climate_decay_factor": recency["climate_decay_factor"],
-        "human_activity_score": score,
-        "occupancy_confidence": occupancy_confidence,
-        "automation_noise_likelihood": automation_noise_likelihood,
-    }
-    result.update(reason_info)
-    return result
 
 
 
@@ -1271,225 +1148,6 @@ def _summarize_house_state(data: dict, action: dict) -> str:
 
 
 
-
-def _filter_human_likely_rooms(ranked_rooms: list[dict]) -> list[dict]:
-    results = []
-    for item in ranked_rooms:
-        if item.get("occupancy_confidence") in {"high", "medium"} and item.get("automation_noise_likelihood") != "high":
-            results.append(item)
-    return results
-
-
-def _filter_background_like_rooms(ranked_rooms: list[dict]) -> list[dict]:
-    results = []
-    for item in ranked_rooms:
-        if item.get("automation_noise_likelihood") == "high":
-            results.append(item)
-    return results
-
-
-
-def _summarize_house_sensors(sensor_result, action=None, question=None, user_question=None):
-    """
-    Summarize /ai/house_sensors output into human-readable house awareness.
-
-    Supports both call styles:
-    - _summarize_house_sensors(data, action, question=question)
-    - _summarize_house_sensors(data, user_question=question)
-
-    Important:
-    - supports safe executor wrapper shape:
-      {"status":"ok","data": {...actual sensor payload...}}
-    - enriches the payload first with SQLite-backed room intelligence
-    - then ranks/filter rooms from the enriched payload
-    """
-    if not isinstance(sensor_result, dict):
-        return "I could not read the house sensor data."
-
-    payload = sensor_result
-
-    if isinstance(sensor_result.get("data"), dict):
-        payload = sensor_result.get("data") or {}
-
-    if not isinstance(payload, dict):
-        return "I could not read the house sensor payload."
-
-    enriched_payload = _enrich_house_sensor_payload_with_activity_reasons(payload)
-    ranked_rooms = _build_ranked_room_intelligence(enriched_payload)
-
-    if not ranked_rooms:
-        return "I could not determine room activity right now."
-
-    actual_question = question if question is not None else user_question
-    actual_question = (actual_question or "").strip().lower()
-
-    human_rooms = _filter_human_likely_rooms(ranked_rooms)
-    background_rooms = _filter_background_like_rooms(ranked_rooms)
-
-    most_active_room = ranked_rooms[0] if ranked_rooms else None
-
-    if any(phrase in actual_question for phrase in [
-        "most active room",
-        "which room is most active",
-        "what room is most active",
-        "most active"
-    ]):
-        if most_active_room:
-            room_name = most_active_room.get("room_name") or most_active_room.get("room") or "unknown room"
-            primary = most_active_room.get("activity_reason_primary") or "unknown"
-            confidence = most_active_room.get("occupancy_confidence") or "low"
-            score = most_active_room.get("human_activity_score", 0)
-            return (
-                f"The most active room right now appears to be {room_name}. "
-                f"It scores {score}/100 for likely human activity, "
-                f"with {confidence} occupancy confidence, mainly because of {primary}."
-            )
-        return "I could not determine the most active room right now."
-
-    if any(phrase in actual_question for phrase in [
-        "recently used by a person",
-        "recently used",
-        "likely being used",
-        "used by a person",
-        "human activity"
-    ]):
-        if human_rooms:
-            names = [
-                room.get("room_name") or room.get("room") or "unknown room"
-                for room in human_rooms[:6]
-            ]
-            return "The rooms most likely showing recent human activity are: " + ", ".join(names) + "."
-        return "I do not currently see strong signs of recent human activity."
-
-    if any(phrase in actual_question for phrase in [
-        "background automation",
-        "just background",
-        "automation only",
-        "probably just automation"
-    ]):
-        if background_rooms:
-            names = [
-                room.get("room_name") or room.get("room") or "unknown room"
-                for room in background_rooms[:6]
-            ]
-            return "The rooms that look most like background automation right now are: " + ", ".join(names) + "."
-        return "I do not currently see rooms that strongly look like background automation."
-
-    def _normalize_question_room_guess(text: str) -> str:
-        guess = (text or "").strip().lower()
-        guess = guess.replace("?", "").strip()
-
-        prefixes = [
-            "why is ",
-            "what is happening in ",
-            "what's happening in ",
-            "what is active in ",
-            "what sensors are active in ",
-            "give me the current state of ",
-            "current state of ",
-        ]
-        for prefix in prefixes:
-            if guess.startswith(prefix):
-                guess = guess[len(prefix):].strip()
-                break
-
-        if guess.startswith("the "):
-            guess = guess[4:].strip()
-
-        suffixes = [
-            " active",
-            " right now",
-            " currently",
-        ]
-        changed = True
-        while changed:
-            changed = False
-            for suffix in suffixes:
-                if guess.endswith(suffix):
-                    guess = guess[: -len(suffix)].strip()
-                    changed = True
-
-        return guess.replace(" ", "")
-
-    normalized_room_guess = None
-
-    if any(
-        actual_question.startswith(prefix)
-        for prefix in [
-            "why is ",
-            "what is happening in ",
-            "what's happening in ",
-            "what is active in ",
-            "what sensors are active in ",
-            "give me the current state of ",
-            "current state of ",
-        ]
-    ):
-        normalized_room_guess = _normalize_question_room_guess(actual_question)
-
-    if normalized_room_guess:
-        for room in ranked_rooms:
-            room_name_raw = (room.get("room_name") or room.get("room") or "").strip()
-            room_name_normalized = room_name_raw.lower().replace(" ", "")
-
-            if room_name_normalized == normalized_room_guess:
-                explanation = room.get("activity_reason") or "I could not determine a clear reason."
-                confidence = room.get("activity_reason_confidence") or "low"
-                score = room.get("human_activity_score", 0)
-                occupancy = room.get("occupancy_confidence") or "low"
-                status = room.get("room_status") or "unknown"
-
-                return (
-                    f"{room_name_raw} currently appears {status} because {explanation}. "
-                    f"Occupancy confidence is {occupancy}, reasoning confidence is {confidence}, "
-                    f"and the human activity score is {score}/100."
-                )
-
-
-        for room in ranked_rooms:
-            room_name = (room.get("room_name") or room.get("room") or "").strip().lower()
-            normalized_guess = room_name_guess.replace(" ", "")
-            normalized_room = room_name.replace(" ", "")
-
-            if room_name == room_name_guess or normalized_room == normalized_guess:
-                explanation = room.get("activity_reason") or "I could not determine a clear reason."
-                confidence = room.get("activity_reason_confidence") or "low"
-                score = room.get("human_activity_score", 0)
-                return (
-                    f"{room.get('room_name') or room.get('room')} appears active because {explanation}. "
-                    f"The reasoning confidence is {confidence}, with a human activity score of {score}/100."
-                )
-
-    human_names = [
-        room.get("room_name") or room.get("room") or "unknown room"
-        for room in human_rooms[:5]
-    ]
-    background_names = [
-        room.get("room_name") or room.get("room") or "unknown room"
-        for room in background_rooms[:5]
-    ]
-
-    summary_parts = []
-
-    if most_active_room:
-        summary_parts.append(
-            f"The most active room appears to be {most_active_room.get('room_name') or most_active_room.get('room')}."
-        )
-
-    if human_names:
-        summary_parts.append(
-            "Rooms most likely showing human activity: " + ", ".join(human_names) + "."
-        )
-
-    if background_names:
-        summary_parts.append(
-            "Rooms that look more like background automation: " + ", ".join(background_names) + "."
-        )
-
-    if not summary_parts:
-        return "I could not build a useful house sensor summary right now."
-
-    return " ".join(summary_parts)
 
 
 
@@ -3096,21 +2754,423 @@ def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
     }
 
 
+
+def _clamp01(value):
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return 0.0
+
+
+def _classification_priority_weight(classification: str) -> float:
+    mapping = {
+        "occupied": 1.00,
+        "transient": 0.68,
+        "passive": 0.42,
+        "uncertain": 0.30,
+        "idle": 0.05,
+    }
+    return mapping.get(str(classification or "").strip().lower(), 0.05)
+
+
+def _classify_room_state(
+    *,
+    room_role: str,
+    presence: bool,
+    motion: bool,
+    lights_on: bool,
+    access_active: bool,
+    climate_active: bool,
+    recency: dict,
+    human_activity_score: int,
+):
+    """
+    Explicit Room Reasoning V2 classification layer.
+
+    Returns one of:
+    - occupied
+    - transient
+    - passive
+    - idle
+    - uncertain
+    """
+    role = str(room_role or "general").lower()
+    presence_band = str(recency.get("presence_recency_band") or "unknown").lower()
+    motion_band = str(recency.get("motion_recency_band") or "unknown").lower()
+    recency_band = str(recency.get("recency_band") or "unknown").lower()
+
+    transitional_roles = {"transitional", "bathroom"}
+    sustained_roles = {"living", "desk", "bedroom", "kitchen", "child"}
+
+    if presence:
+        return "occupied"
+
+    if motion and not presence:
+        if role in transitional_roles:
+            return "transient"
+        if role in sustained_roles and motion_band == "fresh" and human_activity_score >= 45:
+            return "uncertain"
+        return "transient" if motion_band == "fresh" else "uncertain"
+
+    if not presence and not motion:
+        if lights_on or climate_active or access_active:
+            if role == "utility":
+                return "passive"
+            if lights_on and not access_active and not climate_active:
+                return "passive"
+            if climate_active and not lights_on:
+                return "passive"
+            if access_active and role in transitional_roles:
+                return "transient"
+            return "passive"
+
+    if not presence and not motion:
+        if presence_band == "fresh" and human_activity_score >= 45:
+            return "uncertain"
+        if recency_band in {"aging"} and human_activity_score >= 35:
+            return "uncertain"
+        return "idle"
+
+    return "uncertain"
+
+
+def _compute_confidence_score(
+    *,
+    classification: str,
+    room_role: str,
+    presence: bool,
+    motion: bool,
+    lights_on: bool,
+    access_active: bool,
+    climate_active: bool,
+    recency: dict,
+    human_activity_score: int,
+):
+    role = str(room_role or "general").lower()
+    motion_band = str(recency.get("motion_recency_band") or "unknown").lower()
+    presence_band = str(recency.get("presence_recency_band") or "unknown").lower()
+    recency_band = str(recency.get("recency_band") or "unknown").lower()
+
+    score = 0.45
+
+    if classification == "occupied":
+        score = 0.72
+        if presence:
+            score += 0.12
+        if motion:
+            score += 0.08
+        if lights_on:
+            score += 0.05
+        if access_active:
+            score += 0.03
+        if role in {"living", "desk", "bedroom", "kitchen", "child"}:
+            score += 0.03
+
+    elif classification == "transient":
+        score = 0.58
+        if motion:
+            score += 0.10
+        if access_active:
+            score += 0.06
+        if role in {"transitional", "bathroom"}:
+            score += 0.06
+        if lights_on:
+            score -= 0.03
+        if climate_active:
+            score -= 0.04
+
+    elif classification == "passive":
+        score = 0.60
+        if lights_on:
+            score += 0.06
+        if climate_active:
+            score += 0.05
+        if not motion and not presence:
+            score += 0.05
+        if role == "utility":
+            score += 0.05
+
+    elif classification == "idle":
+        score = 0.82
+        if recency_band == "stale":
+            score += 0.06
+        if presence_band == "fresh" or motion_band == "fresh":
+            score -= 0.18
+
+    elif classification == "uncertain":
+        score = 0.48
+        if presence_band == "fresh":
+            score += 0.08
+        if motion_band == "fresh":
+            score += 0.05
+        if lights_on:
+            score += 0.03
+        if climate_active:
+            score -= 0.03
+
+    # gently blend in current score signal
+    score += (max(0, min(100, int(human_activity_score))) / 100.0 - 0.5) * 0.10
+
+    return round(_clamp01(score), 2)
+
+
+def _compute_human_likelihood(
+    *,
+    classification: str,
+    room_role: str,
+    presence: bool,
+    motion: bool,
+    lights_on: bool,
+    access_active: bool,
+    climate_active: bool,
+    recency: dict,
+    human_activity_score: int,
+):
+    role = str(room_role or "general").lower()
+    motion_band = str(recency.get("motion_recency_band") or "unknown").lower()
+    presence_band = str(recency.get("presence_recency_band") or "unknown").lower()
+
+    value = 0.08
+
+    if presence:
+        value += 0.62
+    if motion:
+        value += 0.18
+    if motion_band == "fresh":
+        value += 0.06
+    if presence_band == "fresh":
+        value += 0.08
+    if lights_on:
+        value += 0.04
+    if access_active:
+        value += 0.03
+
+    if climate_active and not presence and not motion:
+        value -= 0.08
+
+    if role in {"living", "desk", "bedroom", "kitchen", "child"}:
+        value += 0.05
+    if role in {"transitional", "bathroom"} and not presence:
+        value -= 0.08
+    if role == "utility":
+        value -= 0.14
+
+    if classification == "occupied":
+        value += 0.10
+    elif classification == "transient":
+        value += 0.03
+    elif classification == "passive":
+        value -= 0.10
+    elif classification == "idle":
+        value -= 0.20
+    elif classification == "uncertain":
+        value -= 0.03
+
+    value += (max(0, min(100, int(human_activity_score))) / 100.0 - 0.5) * 0.18
+
+    return round(_clamp01(value), 2)
+
+
+def _compute_automation_likelihood(
+    *,
+    classification: str,
+    room_role: str,
+    presence: bool,
+    motion: bool,
+    lights_on: bool,
+    access_active: bool,
+    climate_active: bool,
+    recency: dict,
+    automation_noise_likelihood: str,
+):
+    role = str(room_role or "general").lower()
+    recency_band = str(recency.get("recency_band") or "unknown").lower()
+
+    value = 0.10
+
+    if climate_active:
+        value += 0.24
+    if lights_on and not presence and not motion:
+        value += 0.18
+    if access_active and not presence and not motion:
+        value += 0.10
+    if role == "utility":
+        value += 0.22
+    if role in {"transitional", "bathroom"} and not presence:
+        value += 0.10
+    if recency_band == "stale":
+        value += 0.10
+
+    if presence:
+        value -= 0.28
+    if motion and str(recency.get("motion_recency_band") or "").lower() == "fresh":
+        value -= 0.10
+
+    if classification == "passive":
+        value += 0.12
+    elif classification == "idle":
+        value += 0.05
+    elif classification == "occupied":
+        value -= 0.18
+    elif classification == "transient":
+        value -= 0.04
+
+    noise = str(automation_noise_likelihood or "low").lower()
+    if noise == "high":
+        value += 0.15
+    elif noise == "medium":
+        value += 0.06
+
+    return round(_clamp01(value), 2)
+
+
+def _compute_priority_score(
+    *,
+    classification: str,
+    confidence_score: float,
+    human_likelihood: float,
+    human_activity_score: int,
+    recency: dict,
+):
+    class_weight = _classification_priority_weight(classification)
+    freshness_bonus = 1.0
+
+    if str(recency.get("recency_band") or "").lower() == "fresh":
+        freshness_bonus = 1.05
+    elif str(recency.get("recency_band") or "").lower() == "stale":
+        freshness_bonus = 0.82
+
+    base = class_weight * max(0.35, float(human_likelihood)) * float(confidence_score)
+    score_norm = max(0.0, min(1.0, int(human_activity_score) / 100.0))
+    final = (base * 0.82) + (score_norm * 0.18)
+    final *= freshness_bonus
+
+    return round(_clamp01(final), 2)
+
+
+def _build_reason_factors(
+    *,
+    classification: str,
+    room_role: str,
+    presence: bool,
+    motion: bool,
+    lights_on: bool,
+    access_active: bool,
+    climate_active: bool,
+    recency: dict,
+):
+    factors = []
+    role = str(room_role or "general").lower()
+    presence_band = str(recency.get("presence_recency_band") or "unknown").lower()
+    motion_band = str(recency.get("motion_recency_band") or "unknown").lower()
+    recency_band = str(recency.get("recency_band") or "unknown").lower()
+
+    if presence:
+        factors.append("stable presence is currently detected")
+
+    if motion:
+        if motion_band == "fresh":
+            factors.append("recent motion supports active use")
+        else:
+            factors.append("motion is present but not fully fresh")
+
+    if lights_on:
+        factors.append("lights are currently on")
+
+    if access_active:
+        factors.append("recent access-related activity is visible")
+
+    if climate_active:
+        if not presence and not motion:
+            factors.append("climate-related activity is present without clear occupancy")
+        else:
+            factors.append("climate activity is also present")
+
+    if not presence and not motion and not lights_on and not access_active and not climate_active:
+        factors.append("no strong live activity signals are currently visible")
+
+    if not presence and presence_band == "fresh":
+        factors.append("recent presence memory is still influencing room state")
+
+    if not motion and motion_band in {"fresh", "aging"} and classification in {"transient", "uncertain"}:
+        factors.append("recent motion memory is still contributing")
+
+    if role in {"transitional", "bathroom"} and classification in {"transient", "passive", "uncertain"}:
+        factors.append("this room type usually reflects passing activity rather than sustained use")
+
+    if role == "utility" and classification in {"passive", "idle", "uncertain"}:
+        factors.append("this room is more likely to reflect system or background activity")
+
+    if recency_band == "stale" and classification != "occupied":
+        factors.append("the strongest signals are no longer fresh")
+
+    # remove duplicates while preserving order
+    deduped = []
+    seen = set()
+    for item in factors:
+        key = item.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+
+    return deduped[:6]
+
+
+def _build_room_reasoning_summary(
+    *,
+    room_name: str,
+    classification: str,
+    confidence_score: float,
+    reason_factors: list,
+):
+    label = _human_room_label(room_name)
+    factors = reason_factors or []
+
+    top = factors[:2]
+    tail = factors[2:4]
+
+    if classification == "occupied":
+        if top:
+            return f"{label} appears occupied because {_join_natural(top)}."
+        return f"{label} appears occupied."
+
+    if classification == "transient":
+        if top:
+            return f"{label} shows passing activity because {_join_natural(top)}."
+        return f"{label} shows passing activity rather than sustained room use."
+
+    if classification == "passive":
+        if top:
+            return f"{label} appears active, but the pattern looks more like background automation because {_join_natural(top)}."
+        return f"{label} appears active, but more like background automation than human use."
+
+    if classification == "idle":
+        if top:
+            return f"{label} currently looks idle because {_join_natural(top)}."
+        return f"{label} currently looks idle."
+
+    if classification == "uncertain":
+        if top and tail:
+            return f"{label} shows mixed signals: {_join_natural(top)}, with {_join_natural(tail)} also contributing."
+        if top:
+            return f"{label} shows mixed signals because {_join_natural(top)}."
+        return f"{label} shows mixed signals and cannot yet be classified confidently."
+
+    return f"{label} could not be classified clearly."
+
+
 def _score_room_intelligence(room_name, room_payload, now_ts=None):
     """
-    Compute house-awareness scoring for one room.
+    Room Reasoning V2
 
-    Returns:
-    - human_activity_score (0-100)
-    - occupancy_confidence (low/medium/high)
-    - automation_noise_likelihood (low/medium/high)
-
-    Major improvements:
-    - SQLite-backed persistent recency memory
-    - role-aware weighting
-    - per-signal decay
-    - access-only states down-weighted
-    - climate-only states pushed toward automation noise
+    Keeps the existing score/decay architecture, but adds:
+    - explicit classification
+    - confidence_score (0..1)
+    - human_likelihood (0..1)
+    - automation_likelihood (0..1)
+    - priority_score (0..1)
+    - reason_factors
+    - natural summary
     """
     payload = room_payload or {}
     profile = _get_room_role_profile(room_name, payload)
@@ -3120,9 +3180,20 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
     presence = _safe_bool(payload.get("presence"))
     motion = _safe_bool(payload.get("motion"))
     lights_on = _safe_bool(payload.get("lights_on") or payload.get("light_on") or payload.get("lighting_active"))
-    access_active = _safe_bool(payload.get("door_open") or payload.get("door_active") or payload.get("nfc_active") or payload.get("access_active"))
-    climate_active = _safe_bool(payload.get("climate_active") or payload.get("heating_active") or payload.get("hvac_active") or payload.get("temperature_control_active"))
+    access_active = _safe_bool(
+        payload.get("door_open")
+        or payload.get("door_active")
+        or payload.get("nfc_active")
+        or payload.get("access_active")
+    )
+    climate_active = _safe_bool(
+        payload.get("climate_active")
+        or payload.get("heating_active")
+        or payload.get("hvac_active")
+        or payload.get("temperature_control_active")
+    )
 
+    # existing score logic retained and lightly cleaned
     base_score = 0.0
 
     if presence:
@@ -3169,11 +3240,11 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
     if recency["recency_band"] == "stale" and not presence:
         base_score *= 0.75
 
-    score = int(round(max(0.0, min(100.0, base_score))))
+    human_activity_score = int(round(max(0.0, min(100.0, base_score))))
 
-    if presence and score >= 65:
+    if presence and human_activity_score >= 65:
         occupancy_confidence = "high"
-    elif score >= 35:
+    elif human_activity_score >= 35:
         occupancy_confidence = "medium"
     else:
         occupancy_confidence = "low"
@@ -3208,6 +3279,79 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
     else:
         automation_noise_likelihood = "low"
 
+    classification = _classify_room_state(
+        room_role=profile["role"],
+        presence=presence,
+        motion=motion,
+        lights_on=lights_on,
+        access_active=access_active,
+        climate_active=climate_active,
+        recency=recency,
+        human_activity_score=human_activity_score,
+    )
+
+    confidence_score = _compute_confidence_score(
+        classification=classification,
+        room_role=profile["role"],
+        presence=presence,
+        motion=motion,
+        lights_on=lights_on,
+        access_active=access_active,
+        climate_active=climate_active,
+        recency=recency,
+        human_activity_score=human_activity_score,
+    )
+
+    human_likelihood = _compute_human_likelihood(
+        classification=classification,
+        room_role=profile["role"],
+        presence=presence,
+        motion=motion,
+        lights_on=lights_on,
+        access_active=access_active,
+        climate_active=climate_active,
+        recency=recency,
+        human_activity_score=human_activity_score,
+    )
+
+    automation_likelihood = _compute_automation_likelihood(
+        classification=classification,
+        room_role=profile["role"],
+        presence=presence,
+        motion=motion,
+        lights_on=lights_on,
+        access_active=access_active,
+        climate_active=climate_active,
+        recency=recency,
+        automation_noise_likelihood=automation_noise_likelihood,
+    )
+
+    priority_score = _compute_priority_score(
+        classification=classification,
+        confidence_score=confidence_score,
+        human_likelihood=human_likelihood,
+        human_activity_score=human_activity_score,
+        recency=recency,
+    )
+
+    reason_factors = _build_reason_factors(
+        classification=classification,
+        room_role=profile["role"],
+        presence=presence,
+        motion=motion,
+        lights_on=lights_on,
+        access_active=access_active,
+        climate_active=climate_active,
+        recency=recency,
+    )
+
+    summary = _build_room_reasoning_summary(
+        room_name=room_name,
+        classification=classification,
+        confidence_score=confidence_score,
+        reason_factors=reason_factors,
+    )
+
     result = {
         "room_role": profile["role"],
         "recency_band": recency["recency_band"],
@@ -3222,12 +3366,288 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
         "light_decay_factor": recency["light_decay_factor"],
         "access_decay_factor": recency["access_decay_factor"],
         "climate_decay_factor": recency["climate_decay_factor"],
-        "human_activity_score": score,
+        "human_activity_score": human_activity_score,
         "occupancy_confidence": occupancy_confidence,
         "automation_noise_likelihood": automation_noise_likelihood,
+
+        # V2 fields
+        "classification": classification,
+        "confidence_score": confidence_score,
+        "human_likelihood": human_likelihood,
+        "automation_likelihood": automation_likelihood,
+        "priority_score": priority_score,
+        "reason_factors": reason_factors,
+        "summary": summary,
     }
+
     result.update(reason_info)
     return result
+
+
+
+
+
+def _build_ranked_room_intelligence(sensor_payload):
+    """
+    Build ranked list of room intelligence records from enriched /ai/house_sensors payload.
+    V2 ranking prefers explicit room priority first.
+    """
+    if not isinstance(sensor_payload, dict):
+        return []
+
+    rooms = sensor_payload.get("rooms")
+    if not isinstance(rooms, list):
+        return []
+
+    ranked = []
+
+    for room_payload in rooms:
+        item = dict(room_payload or {})
+        item["room_name"] = item.get("room") or "unknown_room"
+        ranked.append(item)
+
+    ranked.sort(
+        key=lambda r: (
+            float(r.get("priority_score", 0.0) or 0.0),
+            int(r.get("human_activity_score", 0) or 0),
+            float(r.get("confidence_score", 0.0) or 0.0),
+            1 if str(r.get("classification", "")).lower() == "occupied" else 0,
+        ),
+        reverse=True,
+    )
+
+    return ranked
+
+
+def _summarize_house_sensors(sensor_result, action=None, question=None, user_question=None):
+    """
+    V2 house sensor summary:
+    - uses explicit classification
+    - uses room summaries
+    - better room-specific responses
+    """
+    if not isinstance(sensor_result, dict):
+        return "I could not read the house sensor data."
+
+    payload = sensor_result
+    if isinstance(sensor_result.get("data"), dict):
+        payload = sensor_result.get("data") or {}
+
+    if not isinstance(payload, dict):
+        return "I could not read the house sensor payload."
+
+    enriched_payload = _enrich_house_sensor_payload_with_activity_reasons(payload)
+    ranked_rooms = _build_ranked_room_intelligence(enriched_payload)
+
+    if not ranked_rooms:
+        return "I could not determine room activity right now."
+
+    actual_question = question if question is not None else user_question
+    actual_question = (actual_question or "").strip().lower()
+
+    human_rooms = _filter_human_likely_rooms(ranked_rooms)
+    background_rooms = _filter_background_like_rooms(ranked_rooms)
+    most_active_room = ranked_rooms[0] if ranked_rooms else None
+
+    if any(
+        phrase in actual_question
+        for phrase in [
+            "most active room",
+            "which room is most active",
+            "what room is most active",
+            "most active",
+        ]
+    ):
+        if most_active_room:
+            room_name = most_active_room.get("room_name") or most_active_room.get("room") or "unknown room"
+            classification = most_active_room.get("classification") or "unknown"
+            confidence_score = most_active_room.get("confidence_score", 0.0)
+            score = most_active_room.get("human_activity_score", 0)
+            summary = most_active_room.get("summary")
+
+            if summary:
+                return (
+                    f"The most important active room right now is {room_name}. "
+                    f"It is classified as {classification} with confidence {round(float(confidence_score) * 100)} percent. "
+                    f"{summary}"
+                )
+
+            return (
+                f"The most important active room right now is {room_name}. "
+                f"It is classified as {classification} with a human activity score of {score}/100."
+            )
+        return "I could not determine the most active room right now."
+
+    if any(
+        phrase in actual_question
+        for phrase in [
+            "recently used by a person",
+            "recently used",
+            "likely being used",
+            "used by a person",
+            "human activity",
+            "which rooms are likely being used",
+            "what rooms are likely being used",
+            "which rooms are probably being used",
+            "what rooms are probably being used",
+        ]
+    ):
+        if human_rooms:
+            lines = []
+            for room in human_rooms[:5]:
+                room_name = room.get("room_name") or room.get("room") or "unknown room"
+                classification = room.get("classification") or "unknown"
+                confidence_score = round(float(room.get("confidence_score", 0.0) or 0.0) * 100)
+                lines.append(f"{room_name} ({classification}, {confidence_score} percent confidence)")
+            return "The rooms most likely showing real human use right now are: " + ", ".join(lines) + "."
+        return "I do not currently see strong signs of real human room use."
+
+    if any(
+        phrase in actual_question
+        for phrase in [
+            "background automation",
+            "just background",
+            "automation only",
+            "probably just automation",
+            "which rooms look like automation",
+            "what rooms look like automation",
+        ]
+    ):
+        if background_rooms:
+            lines = []
+            for room in background_rooms[:5]:
+                room_name = room.get("room_name") or room.get("room") or "unknown room"
+                classification = room.get("classification") or "unknown"
+                automation_likelihood = round(float(room.get("automation_likelihood", 0.0) or 0.0) * 100)
+                lines.append(f"{room_name} ({classification}, automation likelihood {automation_likelihood} percent)")
+            return "The rooms that currently look most like background automation are: " + ", ".join(lines) + "."
+        return "I do not currently see rooms that strongly look like background automation."
+
+    def _normalize_question_room_guess(text: str) -> str:
+        guess = (text or "").strip().lower()
+        guess = guess.replace("?", "").strip()
+
+        prefixes = [
+            "why is ",
+            "what is happening in ",
+            "what's happening in ",
+            "what is active in ",
+            "what sensors are active in ",
+            "give me the current state of ",
+            "current state of ",
+            "is anyone in ",
+            "is anyone in the ",
+            "is the ",
+        ]
+        for prefix in prefixes:
+            if guess.startswith(prefix):
+                guess = guess[len(prefix):].strip()
+                break
+
+        if guess.startswith("the "):
+            guess = guess[4:].strip()
+
+        suffixes = [
+            " active",
+            " right now",
+            " currently",
+            " occupied",
+            " in use",
+        ]
+        changed = True
+        while changed:
+            changed = False
+            for suffix in suffixes:
+                if guess.endswith(suffix):
+                    guess = guess[: -len(suffix)].strip()
+                    changed = True
+
+        return guess.replace(" ", "")
+
+    normalized_room_guess = None
+
+    if any(
+        actual_question.startswith(prefix)
+        for prefix in [
+            "why is ",
+            "what is happening in ",
+            "what's happening in ",
+            "what is active in ",
+            "what sensors are active in ",
+            "give me the current state of ",
+            "current state of ",
+            "is anyone in ",
+            "is anyone in the ",
+        ]
+    ):
+        normalized_room_guess = _normalize_question_room_guess(actual_question)
+
+    if normalized_room_guess:
+        for room in ranked_rooms:
+            room_name_raw = (room.get("room_name") or room.get("room") or "").strip()
+            room_name_normalized = room_name_raw.lower().replace(" ", "")
+
+            if room_name_normalized == normalized_room_guess:
+                classification = room.get("classification") or "unknown"
+                summary = room.get("summary") or "I could not determine a clear room summary."
+                confidence_score = round(float(room.get("confidence_score", 0.0) or 0.0) * 100)
+                human_likelihood = round(float(room.get("human_likelihood", 0.0) or 0.0) * 100)
+                automation_likelihood = round(float(room.get("automation_likelihood", 0.0) or 0.0) * 100)
+                reason_factors = room.get("reason_factors") or []
+
+                detail_bits = []
+                if reason_factors:
+                    detail_bits.append("Key factors: " + "; ".join(reason_factors[:4]) + ".")
+                detail_bits.append(
+                    f"It is classified as {classification} with confidence {confidence_score} percent."
+                )
+                detail_bits.append(
+                    f"Human likelihood is {human_likelihood} percent and automation likelihood is {automation_likelihood} percent."
+                )
+
+                return summary + " " + " ".join(detail_bits)
+
+    if any(
+        phrase in actual_question
+        for phrase in [
+            "which rooms are occupied",
+            "what rooms are occupied",
+            "occupancy",
+            "is anyone home",
+            "is anyone downstairs",
+        ]
+    ):
+        occupied_rooms = [r for r in ranked_rooms if str(r.get("classification", "")).lower() == "occupied"]
+        if occupied_rooms:
+            names = [r.get("room_name") or r.get("room") or "unknown room" for r in occupied_rooms[:6]]
+            return "The rooms that currently look occupied are: " + ", ".join(names) + "."
+        return "I do not currently see any rooms that confidently look occupied."
+
+    human_names = [room.get("room_name") or room.get("room") or "unknown room" for room in human_rooms[:5]]
+    background_names = [room.get("room_name") or room.get("room") or "unknown room" for room in background_rooms[:5]]
+
+    summary_parts = []
+
+    if most_active_room:
+        summary_parts.append(
+            most_active_room.get("summary")
+            or f"The most important active room appears to be {most_active_room.get('room_name') or most_active_room.get('room')}."
+        )
+
+    if human_names:
+        summary_parts.append("Rooms most likely showing human use: " + ", ".join(human_names) + ".")
+
+    if background_names:
+        summary_parts.append("Rooms that look more like background automation: " + ", ".join(background_names) + ".")
+
+    if not summary_parts:
+        return "I could not build a useful house sensor summary right now."
+
+    return " ".join(summary_parts)
+
+
+
+
 
 
 def _filter_human_likely_rooms(ranked_rooms):
@@ -3356,33 +3776,3 @@ def _enrich_house_sensor_payload_with_activity_reasons(sensor_payload, now_ts=No
 
 
 
-def _build_ranked_room_intelligence(sensor_payload):
-    """
-    Build ranked list of room intelligence records from enriched /ai/house_sensors payload.
-    Supports the real live payload shape where rooms is a LIST.
-    Highest human_activity_score first.
-    """
-    if not isinstance(sensor_payload, dict):
-        return []
-
-    rooms = sensor_payload.get("rooms")
-    if not isinstance(rooms, list):
-        return []
-
-    ranked = []
-
-    for room_payload in rooms:
-        item = dict(room_payload or {})
-        item["room_name"] = item.get("room") or "unknown_room"
-        ranked.append(item)
-
-    ranked.sort(
-        key=lambda r: (
-            int(r.get("human_activity_score", 0)),
-            1 if str(r.get("occupancy_confidence", "low")).lower() == "high" else 0,
-            1 if str(r.get("activity_reason_primary", "")).lower() == "presence_detected" else 0,
-        ),
-        reverse=True,
-    )
-
-    return ranked
