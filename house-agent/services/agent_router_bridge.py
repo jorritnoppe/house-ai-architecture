@@ -236,6 +236,45 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     if not q:
         return None
 
+    # Highest-priority house occupancy / zone questions.
+    # These must resolve before any other generic tool or device matchers.
+    if any(x in q for x in [
+        "is anyone downstairs",
+        "anyone downstairs",
+        "is anyone upstairs",
+        "anyone upstairs",
+        "is anyone in the attic",
+        "anyone in the attic",
+        "which rooms downstairs are occupied",
+        "what rooms downstairs are occupied",
+        "which downstairs rooms are occupied",
+        "what downstairs rooms are occupied",
+        "which rooms upstairs are occupied",
+        "what rooms upstairs are occupied",
+        "which upstairs rooms are occupied",
+        "what upstairs rooms are occupied",
+        "which rooms downstairs are being used",
+        "what rooms downstairs are being used",
+        "which downstairs rooms are being used",
+        "what downstairs rooms are being used",
+        "which rooms upstairs are being used",
+        "what rooms upstairs are being used",
+        "which upstairs rooms are being used",
+        "what upstairs rooms are being used",
+        "attic occupancy",
+        "upstairs occupancy",
+        "downstairs occupancy",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_sensors",
+            "params": {
+                "minutes": 60,
+                "limit": 8000,
+            },
+            "reason": "zone_occupancy_query",
+        }
+
     announcement_text = _extract_announcement_text(question)
     if announcement_text:
         announcement_target = _extract_announcement_target(question)
@@ -533,6 +572,31 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "automation noise",
         "which rooms look like automation",
         "what rooms look like automation",
+        "is anyone downstairs",
+        "anyone downstairs",
+        "is anyone upstairs",
+        "anyone upstairs",
+        "is anyone in the attic",
+        "anyone in the attic",
+        "which rooms downstairs are occupied",
+        "what rooms downstairs are occupied",
+        "which downstairs rooms are occupied",
+        "what downstairs rooms are occupied",
+        "which rooms upstairs are occupied",
+        "what rooms upstairs are occupied",
+        "which upstairs rooms are occupied",
+        "what upstairs rooms are occupied",
+        "which rooms downstairs are being used",
+        "what rooms downstairs are being used",
+        "which downstairs rooms are being used",
+        "what downstairs rooms are being used",
+        "which rooms upstairs are being used",
+        "what rooms upstairs are being used",
+        "which upstairs rooms are being used",
+        "what upstairs rooms are being used",
+        "attic occupancy",
+        "upstairs occupancy",
+        "downstairs occupancy",
     ]):
         return {
             "type": "route",
@@ -653,6 +717,8 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+
+
 def _fmt_num(value, digits: int = 2) -> str:
     try:
         return f"{float(value):.{digits}f}"
@@ -672,6 +738,49 @@ def _fmt(value, unit=""):
         return f"{round(float(value), 2)}{unit}"
     except Exception:
         return str(value)
+
+
+
+def _get_room_zone(room_name: str) -> str:
+    name = str(room_name or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    if not name:
+        return "outside_misc"
+
+    if "upstair" in name:
+        return "upstairs"
+
+    if "downstair" in name:
+        return "downstairs"
+
+    if name in {
+        "bathroom",
+        "deskroom",
+        "childroom",
+        "masterbedroom",
+        "hallwayroom",
+    }:
+        return "upstairs"
+
+    if name in {
+        "attickroom",
+        "atticroom",
+    }:
+        return "attic"
+
+    if name in {
+        "livingroom",
+        "kitchenroom",
+        "diningroom",
+        "entranceroom",
+        "storageroom",
+        "wcroom",
+    }:
+        return "downstairs"
+
+    return "outside_misc"
+
+
 
 
 def _human_room_label(name: str) -> str:
@@ -3449,6 +3558,28 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
     background_rooms = _filter_background_like_rooms(ranked_rooms)
     most_active_room = ranked_rooms[0] if ranked_rooms else None
 
+
+    def _rooms_in_zone(zone_name: str):
+        return [
+            room for room in ranked_rooms
+            if _get_room_zone(room.get("room_name") or room.get("room")) == zone_name
+        ]
+
+    def _occupied_rooms_in_zone(zone_name: str):
+        return [
+            room for room in _rooms_in_zone(zone_name)
+            if str(room.get("classification", "")).lower() == "occupied"
+        ]
+
+    def _human_rooms_in_zone(zone_name: str):
+        return [
+            room for room in human_rooms
+            if _get_room_zone(room.get("room_name") or room.get("room")) == zone_name
+        ]
+
+
+
+
     if any(
         phrase in actual_question
         for phrase in [
@@ -3606,6 +3737,86 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
                 )
 
                 return summary + " " + " ".join(detail_bits)
+
+
+
+
+    if "downstairs" in actual_question:
+        downstairs_occupied = _occupied_rooms_in_zone("downstairs")
+        downstairs_human = _human_rooms_in_zone("downstairs")
+
+        if any(x in actual_question for x in ["is anyone downstairs", "anyone downstairs"]):
+            if downstairs_occupied:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_occupied[:5]]
+                return "Yes, downstairs currently appears occupied. The most likely occupied downstairs rooms are: " + ", ".join(names) + "."
+            if downstairs_human:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_human[:5]]
+                return "Downstairs shows likely human activity in: " + ", ".join(names) + "."
+            return "I do not currently see strong signs of downstairs occupancy."
+
+        if any(x in actual_question for x in [
+            "which rooms downstairs are occupied",
+            "what rooms downstairs are occupied",
+            "which downstairs rooms are occupied",
+            "what downstairs rooms are occupied",
+            "which rooms downstairs are being used",
+            "what rooms downstairs are being used",
+        ]):
+            if downstairs_occupied:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_occupied[:6]]
+                return "The downstairs rooms that currently look occupied are: " + ", ".join(names) + "."
+            if downstairs_human:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_human[:6]]
+                return "The downstairs rooms most likely being used are: " + ", ".join(names) + "."
+            return "I do not currently see occupied downstairs rooms."
+
+    if "upstairs" in actual_question:
+        upstairs_occupied = _occupied_rooms_in_zone("upstairs")
+        upstairs_human = _human_rooms_in_zone("upstairs")
+
+        if any(x in actual_question for x in ["is anyone upstairs", "anyone upstairs"]):
+            if upstairs_occupied:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_occupied[:5]]
+                return "Yes, upstairs currently appears occupied. The most likely occupied upstairs rooms are: " + ", ".join(names) + "."
+            if upstairs_human:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_human[:5]]
+                return "Upstairs shows likely human activity in: " + ", ".join(names) + "."
+            return "I do not currently see strong signs of upstairs occupancy."
+
+        if any(x in actual_question for x in [
+            "which rooms upstairs are occupied",
+            "what rooms upstairs are occupied",
+            "which upstairs rooms are occupied",
+            "what upstairs rooms are occupied",
+            "which rooms upstairs are being used",
+            "what rooms upstairs are being used",
+        ]):
+            if upstairs_occupied:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_occupied[:6]]
+                return "The upstairs rooms that currently look occupied are: " + ", ".join(names) + "."
+            if upstairs_human:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_human[:6]]
+                return "The upstairs rooms most likely being used are: " + ", ".join(names) + "."
+            return "I do not currently see occupied upstairs rooms."
+
+    if "attic" in actual_question:
+        attic_occupied = _occupied_rooms_in_zone("attic")
+        attic_human = _human_rooms_in_zone("attic")
+
+        if any(x in actual_question for x in ["is anyone in the attic", "is anyone attic", "anyone in the attic"]):
+            if attic_occupied:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in attic_occupied[:3]]
+                return "Yes, the attic currently appears occupied. Active attic rooms: " + ", ".join(names) + "."
+            if attic_human:
+                names = [r.get("room_name") or r.get("room") or "unknown room" for r in attic_human[:3]]
+                return "The attic shows likely human activity in: " + ", ".join(names) + "."
+            return "I do not currently see strong signs of attic occupancy."
+
+
+
+
+
+
 
     if any(
         phrase in actual_question

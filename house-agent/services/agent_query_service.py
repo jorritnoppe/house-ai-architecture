@@ -1,44 +1,72 @@
-from extensions import app, query_api
-from services.apc_legacy_core import handle_apc_question
-from config import INFLUX_ORG
+from __future__ import annotations
+
+from typing import Any, Dict
+
 from services.agent_router_bridge import handle_house_or_ai_question
+from services.agent_service import handle_agent_question
 
 
-def run_agent_query(question: str) -> dict:
-    question = (question or "").strip()
+def run_agent_query(question: str) -> Dict[str, Any]:
+    question = str(question or "").strip()
+    q = question.lower()
+
     if not question:
         return {
             "status": "error",
-            "message": "missing 'question'",
+            "mode": "agent_query",
+            "answer": "Missing question.",
+            "intents": [],
         }
 
-    result = None
+    # Hard-priority house intelligence routing.
+    # These questions must never be allowed to fall into unrelated direct-tool
+    # matchers such as APC or generic device summaries.
+    zone_room_intel_phrases = [
+        "is anyone downstairs",
+        "anyone downstairs",
+        "is anyone upstairs",
+        "anyone upstairs",
+        "is anyone in the attic",
+        "anyone in the attic",
+        "which rooms downstairs are occupied",
+        "what rooms downstairs are occupied",
+        "which downstairs rooms are occupied",
+        "what downstairs rooms are occupied",
+        "which rooms upstairs are occupied",
+        "what rooms upstairs are occupied",
+        "which upstairs rooms are occupied",
+        "what upstairs rooms are occupied",
+        "which rooms downstairs are being used",
+        "what rooms downstairs are being used",
+        "which downstairs rooms are being used",
+        "what downstairs rooms are being used",
+        "which rooms upstairs are being used",
+        "what rooms upstairs are being used",
+        "which upstairs rooms are being used",
+        "what upstairs rooms are being used",
+        "attic occupancy",
+        "upstairs occupancy",
+        "downstairs occupancy",
+    ]
 
-    buderus = app.extensions["buderus_service"].handle_agent_question(question)
-    if buderus is not None:
-        result = buderus
-    else:
-        try:
-            apc_result = handle_apc_question(
-                question=question,
-                query_api=query_api,
-                org=INFLUX_ORG,
-                bucket="apcdata",
-                measurements=["apc_ups", "apc_ups2"],
-            )
+    if any(phrase in q for phrase in zone_room_intel_phrases):
+        return handle_house_or_ai_question(question)
 
-            if apc_result:
-                result = {
-                    "answer": apc_result["answer"],
-                    "intents": apc_result["intents"],
-                    "mode": "direct_tool",
-                    "status": "ok",
-                    "tool_data": apc_result["tool_data"],
-                }
-        except Exception as e:
-            app.logger.exception("APC direct tool failed: %s", e)
+    # Normal house / AI router path.
+    result = handle_house_or_ai_question(question)
+    if isinstance(result, dict) and result.get("status") == "ok":
+        return result
 
-        if result is None:
-            result = handle_house_or_ai_question(question)
+    # Fallback general agent path.
+    fallback = handle_agent_question(question)
+    if isinstance(fallback, dict):
+        fallback.setdefault("mode", "fallback_agent")
+        return fallback
 
-    return result
+    return {
+        "status": "ok",
+        "mode": "fallback_agent",
+        "answer": str(fallback),
+        "intents": [],
+    }
+

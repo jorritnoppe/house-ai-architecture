@@ -31,6 +31,83 @@ def _has_words(text: str, words: list[str]) -> bool:
 def _looks_like_safe_action_text(text: str) -> bool:
     t = _normalize_safe_text(text)
 
+    # Hard guard: room/floor/zone intelligence questions must never go to the
+    # safe action router. These belong in the house intelligence path.
+    room_intel_phrases = [
+        "is anyone downstairs",
+        "anyone downstairs",
+        "is anyone upstairs",
+        "anyone upstairs",
+        "is anyone in the attic",
+        "anyone in the attic",
+        "which rooms downstairs are occupied",
+        "what rooms downstairs are occupied",
+        "which downstairs rooms are occupied",
+        "what downstairs rooms are occupied",
+        "which rooms upstairs are occupied",
+        "what rooms upstairs are occupied",
+        "which upstairs rooms are occupied",
+        "what upstairs rooms are occupied",
+        "which rooms downstairs are being used",
+        "what rooms downstairs are being used",
+        "which downstairs rooms are being used",
+        "what downstairs rooms are being used",
+        "which rooms upstairs are being used",
+        "what rooms upstairs are being used",
+        "which upstairs rooms are being used",
+        "what upstairs rooms are being used",
+        "attic occupancy",
+        "upstairs occupancy",
+        "downstairs occupancy",
+        "which rooms are occupied",
+        "what rooms are occupied",
+        "occupied right now",
+        "room occupancy",
+        "occupancy",
+        "house sensors",
+        "house sensor",
+        "sensor overview",
+        "sensor state",
+        "room activity",
+        "is anyone home",
+        "is anyone in the",
+        "what is happening in",
+        "what's happening in",
+        "what is active in",
+        "what sensors are active in",
+        "give me the current state of",
+        "current state of",
+        "why is ",
+        "which room is most active",
+        "what room is most active",
+        "most active room",
+        "most important active room",
+        "which rooms are likely being used",
+        "what rooms are likely being used",
+        "likely human active rooms",
+        "likely occupied rooms",
+        "rooms likely in use",
+        "which rooms are likely automation noise",
+        "which rooms were recently used by a person",
+        "what rooms were recently used by a person",
+        "recently used by a person",
+        "recent human activity",
+        "which rooms had recent human activity",
+        "what rooms had recent human activity",
+        "which rooms are probably being used",
+        "what rooms are probably being used",
+        "which rooms are probably just background automation",
+        "what rooms are probably just background automation",
+        "background automation",
+        "background activity",
+        "automation noise",
+        "which rooms look like automation",
+        "what rooms look like automation",
+    ]
+
+    if any(phrase in t for phrase in room_intel_phrases):
+        return False
+
     music_words = [
         "music",
         "audio",
@@ -55,6 +132,8 @@ def _looks_like_safe_action_text(text: str) -> bool:
         "badkamer",
         "woonkamer",
         "downstairs",
+        "upstairs",
+        "attic",
     ]
 
     status_phrases = [
@@ -97,10 +176,8 @@ def _looks_like_safe_action_text(text: str) -> bool:
         or _has_words(t, ["put", "off"])
     )
 
-    # Generic room-state questions like:
-    # "what is active in deskroom?"
-    # "why is deskroom active?"
-    # should NOT be routed to safe actions unless they clearly mention audio/music.
+    # Generic room-state questions should not be routed to safe actions unless
+    # they clearly mention audio/music.
     if "what is active" in t and not has_music:
         return False
     if "what is running" in t and not has_music:
@@ -113,7 +190,6 @@ def _looks_like_safe_action_text(text: str) -> bool:
         return False
 
     return has_status or ((has_direct_action or has_split_action) and (has_music or has_room))
-
 
 
 
