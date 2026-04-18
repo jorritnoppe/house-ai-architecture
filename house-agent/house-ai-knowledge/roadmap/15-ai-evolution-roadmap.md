@@ -130,6 +130,51 @@ Goal: Add human confirmation for risky actions.
 Example:
 - "Do you want me to turn on party music?"
 
+
+### 7.1 AI-house music MVP
+Status: Done
+
+Completed:
+- safe local AI-house playlist playback route
+- safe stop-room route
+- internal executor support
+- agent phrase matching
+- validation log habit started
+
+Current rule:
+- explicit room target only
+- desk / living / bathroom / toilet phrasing supported
+- no automatic room inference yet
+
+### 7.2 AI-house music library admin
+Status: Active
+
+Goal:
+- maintain the AI-house music library without editing CSV files manually
+
+Tasks:
+- scan music folder
+- preserve enabled flags
+- rebuild enabled playlist
+- expose manual admin page for toggle/delete/refresh
+
+Important:
+- manual library admin routes are not autonomous AI-safe routes
+- destructive actions stay outside the autonomous allowlist
+
+### 13.1 Deferred room-bound music intelligence
+Status: Deferred by design
+
+Planned later:
+- strongest-heard-node room binding
+- multi-node arbitration
+- inferred playback location for requests like "play music"
+
+Do not build this until multi-node capture is mature enough.
+
+
+
+
 ---
 
 ## Phase 4 - House Intelligence Layer

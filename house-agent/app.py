@@ -78,6 +78,8 @@ from routes.automation_energy_routes import automation_energy_bp
 
 from routes.house_sensors_routes import house_sensors_bp
 
+from routes.music_routes import music_bp
+
 
 # Enable CORS
 # CORS(app) -> Already loading in extensions
@@ -172,6 +174,10 @@ app.register_blueprint(automation_energy_bp)
 
 
 app.register_blueprint(house_sensors_bp)
+
+app.register_blueprint(music_bp)
+
+
 
 
 

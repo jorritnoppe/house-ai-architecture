@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AI Server Music Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #111; color: #eee; }
+    h1 { margin-bottom: 8px; }
+    .muted { color: #bbb; margin-bottom: 16px; }
+    button { padding: 8px 12px; margin-right: 8px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; background: #1b1b1b; }
+    th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+    th { background: #222; }
+    tr:nth-child(even) { background: #171717; }
+    .status { margin-top: 12px; padding: 10px; background: #1d2733; border: 1px solid #31455c; }
+    .danger { background: #401818; border-color: #663333; }
+    .toolbar { margin: 16px 0; }
+    .small { font-size: 12px; color: #aaa; }
+  </style>
+</head>
+<body>
+  <h1>AI House Music Library</h1>
+  <div class="muted">Manual admin page for playlist flags, refresh, and delete.</div>
+
+  <div class="toolbar">
+    <button onclick="refreshLibrary(true)">Refresh library</button>
+    <button onclick="loadLibrary()">Reload page data</button>
+  </div>
+
+  <div id="summary" class="small"></div>
+  <div id="status" class="status" style="display:none;"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Enabled</th>
+        <th>Track</th>
+        <th>Title</th>
+        <th>Modified</th>
+        <th>Size</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody id="tracksBody"></tbody>
+  </table>
+
+  <script>
+    function formatBytes(bytes) {
+      const n = Number(bytes || 0);
+      if (!n) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      let idx = 0;
+      let value = n;
+      while (value >= 1024 && idx < units.length - 1) {
+        value /= 1024;
+        idx += 1;
+      }
+      return `${value.toFixed(1)} ${units[idx]}`;
+    }
+
+    function showStatus(message, isError = false) {
+      const box = document.getElementById("status");
+      box.style.display = "block";
+      box.className = isError ? "status danger" : "status";
+      box.textContent = message;
+    }
+
+    async function loadLibrary() {
+      const res = await fetch("/ai-server/music/api/library");
+      const data = await res.json();
+
+      if (data.status !== "ok") {
+        showStatus(data.error || "Failed to load library", true);
+        return;
+      }
+
+      document.getElementById("summary").textContent =
+        `Tracks: ${data.track_count} | Enabled: ${data.enabled_count} | CSV: ${data.track_status_csv}`;
+
+      const body = document.getElementById("tracksBody");
+      body.innerHTML = "";
+
+      for (const track of data.tracks) {
+        const tr = document.createElement("tr");
+
+        const enabledTd = document.createElement("td");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = String(track.enabled) === "1";
+        checkbox.onchange = () => toggleTrack(track.relative_path, checkbox.checked);
+        enabledTd.appendChild(checkbox);
+
+        const pathTd = document.createElement("td");
+        pathTd.textContent = track.relative_path;
+
+        const titleTd = document.createElement("td");
+        titleTd.textContent = track.title || "";
+
+        const modifiedTd = document.createElement("td");
+        modifiedTd.textContent = track.modified_at || "";
+
+        const sizeTd = document.createElement("td");
+        sizeTd.textContent = formatBytes(track.size_bytes);
+
+        const deleteTd = document.createElement("td");
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.onclick = () => deleteTrack(track.relative_path);
+        deleteTd.appendChild(deleteBtn);
+
+        tr.appendChild(enabledTd);
+        tr.appendChild(pathTd);
+        tr.appendChild(titleTd);
+        tr.appendChild(modifiedTd);
+        tr.appendChild(sizeTd);
+        tr.appendChild(deleteTd);
+
+        body.appendChild(tr);
+      }
+    }
+
+    async function refreshLibrary(runRefresh) {
+      if (runRefresh) {
+        const res = await fetch("/ai-server/music/api/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.status !== "ok") {
+          showStatus(data.error || "Refresh failed", true);
+          return;
+        }
+        showStatus(data.answer || "Library refreshed");
+      }
+      await loadLibrary();
+    }
+
+    async function toggleTrack(relativePath, enabled) {
+      const res = await fetch("/ai-server/music/api/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          relative_path: relativePath,
+          enabled: enabled
+        })
+      });
+      const data = await res.json();
+      if (data.status !== "ok") {
+        showStatus(data.error || "Toggle failed", true);
+        await loadLibrary();
+        return;
+      }
+      showStatus(data.answer || "Track updated");
+      await loadLibrary();
+    }
+
+    async function deleteTrack(relativePath) {
+      const ok = confirm(`Delete this track?\n\n${relativePath}`);
+      if (!ok) return;
+
+      const res = await fetch("/ai-server/music/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          relative_path: relativePath
+        })
+      });
+      const data = await res.json();
+      if (data.status !== "ok") {
+        showStatus(data.error || "Delete failed", true);
+        return;
+      }
+      showStatus(data.answer || "Track deleted");
+      await loadLibrary();
+    }
+
+    loadLibrary();
+  </script>
+</body>
+</html>
