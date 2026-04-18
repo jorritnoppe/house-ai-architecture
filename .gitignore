@@ -28,3 +28,15 @@ house-agent/backups/
 house-agent/venv/
 house-agent/secrets/
 house-agent/house-ai-knowledge/_snapshots/
+
+
+
+house-agent/.env
+house-agent/.env.*
+house-agent/secrets/
+house-agent/validation_logs/
+house-agent/backups/
+house-agent/__pycache__/
+house-agent/services/__pycache__/
+house-agent/routes/__pycache__/
+*.pyc
