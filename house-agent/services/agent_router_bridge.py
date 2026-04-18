@@ -16,849 +16,24 @@ import threading
 from datetime import datetime, timezone
 
 
-
-def _extract_room_signal_snapshot(room_name, room_payload):
-    """
-    Normalize the real /ai/house_sensors room payload into the flat signal shape
-    expected by the room reasoning layer.
-
-    Input example:
-    {
-        "room": "bathroom",
-        "presence": {"is_active": True, "last_seen": "..."},
-        "motion": {"is_active": False, "last_seen": None},
-        "lighting": {"is_on": False},
-        "access_security": {"active_signals": [...]},
-        "climate": {...},
-        "activity": {"latest_time": "..."}
-    }
-    """
-    payload = room_payload or {}
-
-    presence_data = payload.get("presence") or {}
-    motion_data = payload.get("motion") or {}
-    lighting_data = payload.get("lighting") or {}
-    access_data = payload.get("access_security") or {}
-    climate_data = payload.get("climate") or {}
-    activity_data = payload.get("activity") or {}
-
-    active_access_signals = access_data.get("active_signals") or []
-    status_signals = access_data.get("status_signals") or []
-
-    access_active = bool(active_access_signals or status_signals)
-
-    climate_active = any(
-        value not in (None, 0, 0.0, False)
-        for value in [
-            climate_data.get("operating_mode"),
-            climate_data.get("temperature_target"),
-            climate_data.get("open_window"),
-        ]
-    )
-
-    normalized = {
-        "room": payload.get("room") or room_name,
-        "room_status": payload.get("room_status"),
-        "has_any_sensor_data": _safe_bool(payload.get("has_any_sensor_data")),
-
-        "presence": _safe_bool(presence_data.get("is_active")),
-        "motion": _safe_bool(motion_data.get("is_active")),
-        "lights_on": _safe_bool(lighting_data.get("is_on")),
-        "access_active": _safe_bool(access_active),
-        "climate_active": _safe_bool(climate_active),
-
-        "last_presence_at": presence_data.get("last_seen"),
-        "last_motion_at": motion_data.get("last_seen"),
-        "last_light_at": activity_data.get("latest_time") if _safe_bool(lighting_data.get("is_on")) else None,
-        "last_access_at": None,
-        "last_climate_at": activity_data.get("latest_time") if climate_active else None,
-        "last_activity_at": activity_data.get("latest_time"),
-        "last_seen_at": activity_data.get("latest_time"),
-        "updated_at": activity_data.get("latest_time"),
-    }
-
-    # try to extract latest access signal timestamp
-    access_times = []
-    for item in active_access_signals + status_signals:
-        if isinstance(item, dict):
-            ts = item.get("time")
-            if ts:
-                access_times.append(ts)
-
-    if access_times:
-        normalized["last_access_at"] = max(access_times)
-
-    # if light is off but there is no dedicated light timestamp, keep None
-    # if presence is inactive but a last_seen exists, keep it for decay logic
-    # same for motion
-
-    return normalized
-
-
-
-
-def _extract_announcement_text(question: str) -> Optional[str]:
-    q = (question or "").strip()
-    if not q:
-        return None
-
-    lower = q.lower()
-
-    prefixes = [
-        "announce ",
-        "say ",
-        "speak ",
-        "tell the house ",
-        "announce in the house ",
-        "say in the house ",
-        "speak in the house ",
-        "announce on the desk speaker ",
-        "say on the desk speaker ",
-        "speak on the desk speaker ",
-        "announce on desk speaker ",
-        "say on desk speaker ",
-        "speak on desk speaker ",
-        "announce on the living speaker ",
-        "say on the living speaker ",
-        "speak on the living speaker ",
-        "announce on the living room speaker ",
-        "say on the living room speaker ",
-        "speak on the living room speaker ",
-        "announce on the toilet speaker ",
-        "say on the toilet speaker ",
-        "speak on the toilet speaker ",
-        "announce on the wc speaker ",
-        "say on the wc speaker ",
-        "speak on the wc speaker ",
-    ]
-
-    for prefix in prefixes:
-        if lower.startswith(prefix):
-            text = q[len(prefix):].strip()
-            if text:
-                return text
-
-    cleanup_suffixes = [
-        " on the desk speaker",
-        " on desk speaker",
-        " on the living speaker",
-        " on the living room speaker",
-        " on the toilet speaker",
-        " on the wc speaker",
-        " in the house",
-        " through the house",
-        " to the house",
-    ]
-
-    cleaned = q
-    cleaned_lower = lower
-    for suffix in cleanup_suffixes:
-        if cleaned_lower.endswith(suffix):
-            cleaned = cleaned[: -len(suffix)].strip()
-            cleaned_lower = cleaned.lower()
-
-    for prefix in ["announce ", "say ", "speak ", "tell the house "]:
-        if cleaned_lower.startswith(prefix):
-            text = cleaned[len(prefix):].strip()
-            if text:
-                return text
-
-    if " announce " in lower:
-        idx = lower.find(" announce ")
-        text = q[idx + len(" announce "):].strip()
-        if text:
-            return text
-
-    return None
-
-
-def _extract_announcement_target(question: str) -> str:
-    q = (question or "").strip().lower()
-
-    if any(x in q for x in [
-        "desk speaker",
-        "deskroom speaker",
-        "desk room speaker",
-        "on desk",
-        "to desk",
-        "in deskroom",
-        "in the desk room",
-        "to the desk room",
-    ]):
-        return "desk"
-
-    if any(x in q for x in [
-        "toilet speaker",
-        "wc speaker",
-        "on toilet",
-        "to toilet",
-        "in the toilet",
-        "to the toilet",
-        "in wc",
-        "to wc",
-    ]):
-        return "toilet"
-
-    if any(x in q for x in [
-        "living speaker",
-        "living room speaker",
-        "livingroom speaker",
-        "on living",
-        "to living",
-        "in the living room",
-        "to the living room",
-    ]):
-        return "living"
-
-    if any(x in q for x in [
-        "party speaker",
-        "party speakers",
-        "party mode",
-    ]):
-        return "party"
-
-    if any(x in q for x in [
-        "in the house",
-        "through the house",
-        "to the house",
-        "whole house",
-        "entire house",
-        "all speakers",
-        "all house speakers",
-    ]):
-        return "living"
-
-    return "living"
-
-
-def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
-    q = (question or "").strip().lower()
-    if not q:
-        return None
-
-    # Highest-priority house occupancy / zone questions.
-    # These must resolve before any other generic tool or device matchers.
-    if any(x in q for x in [
-        "is anyone downstairs",
-        "anyone downstairs",
-        "is anyone upstairs",
-        "anyone upstairs",
-        "is anyone in the attic",
-        "anyone in the attic",
-        "which rooms downstairs are occupied",
-        "what rooms downstairs are occupied",
-        "which downstairs rooms are occupied",
-        "what downstairs rooms are occupied",
-        "which rooms upstairs are occupied",
-        "what rooms upstairs are occupied",
-        "which upstairs rooms are occupied",
-        "what upstairs rooms are occupied",
-        "which rooms downstairs are being used",
-        "what rooms downstairs are being used",
-        "which downstairs rooms are being used",
-        "what downstairs rooms are being used",
-        "which rooms upstairs are being used",
-        "what rooms upstairs are being used",
-        "which upstairs rooms are being used",
-        "what upstairs rooms are being used",
-        "attic occupancy",
-        "upstairs occupancy",
-        "downstairs occupancy",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/house_sensors",
-            "params": {
-                "minutes": 60,
-                "limit": 8000,
-            },
-            "reason": "zone_occupancy_query",
-        }
-
-    announcement_text = _extract_announcement_text(question)
-    if announcement_text:
-        announcement_target = _extract_announcement_target(question)
-        return {
-            "type": "route",
-            "target": "/tools/audio/announce",
-            "params": {
-                "text": announcement_text,
-                "target": announcement_target,
-                "level": "info",
-            },
-        }
-
-    node_aliases = {
-        "ai-server": ["ai-server", "aiserver", "server", "ai server"],
-        "deskpi": ["deskpi", "desk pi", "deskroom pi", "desk room pi"],
-        "electricpi": ["electricpi", "electric pi", "music pi", "audio pi"],
-        "luifelpi": ["luifelpi", "luifel pi"],
-        "discoverpi": ["discoverpi", "discover pi"],
-        "attackpi": ["attackpi", "attack pi", "atticpi", "attic pi", "atticroom pi", "attack pi atticroom"],
-    }
-
-    matched_node = None
-    for node_name, aliases in node_aliases.items():
-        if any(alias in q for alias in aliases):
-            matched_node = node_name
-            break
-
-    service_aliases = {
-        "grafana": ["grafana", "grafana-server", "grafana-server.service"],
-        "netdata": ["netdata", "netdata.service"],
-        "meshagent": ["meshagent", "meshagent.service"],
-        "ssh": ["ssh", "ssh.service"],
-        "ollama": ["ollama", "ollama.service"],
-        "house-agent": ["house-agent", "house agent", "house-agent.service"],
-        "wake-listener": ["wake-listener", "wake listener", "wake-listener.service"],
-        "flask_relays": ["flask_relays", "flask relays", "flask_relays.service"],
-        "wayvnc": ["wayvnc", "wayvnc.service"],
-        "wayvnc-control": ["wayvnc-control", "wayvnc control", "wayvnc-control.service"],
-        "loxone-bridge": ["loxone-bridge", "loxone bridge", "loxone-bridge.service"],
-        "lyrionmusicserver": ["lyrionmusicserver", "lyrion music server", "lyrionmusicserver.service"],
-        "flaskmusic": ["flaskmusic", "flask music", "flaskmusic.service"],
-        "relay": ["relay", "relay.service"],
-        "serialflask": ["serialflask", "serial flask", "serialflask.service"],
-        "flowlogger": ["flowlogger", "flow logger", "flowlogger.service"],
-        "eastron": ["eastron", "eastron.service"],
-        "picam-stream": ["picam-stream", "picam stream", "picam-stream.service"],
-        "mediamtx": ["mediamtx", "mediamtx.service"],
-        "feedback-node": ["feedback-node", "feedback node", "feedback-node.service"],
-        "dnsmasq": ["dnsmasq", "dnsmasq.service"],
-        "flaskapp": ["flaskapp", "flask app", "flaskapp.service"],
-        "apcmonitor": ["apcmonitor", "apc monitor", "apcmonitor.service"],
-        "apcupsd": ["apcupsd", "apcupsd.service"],
-        "bitvavo-flask": ["bitvavo-flask", "bitvavo flask", "bitvavo-flask.service"],
-        "buderuslogger": ["buderuslogger", "buderus logger", "buderuslogger.service"],
-        "Eleprice": ["eleprice", "Eleprice", "eleprice.service", "Eleprice.service"],
-        "sma_logger": ["sma_logger", "sma logger", "sma_logger.service"],
-        "solar_logger": ["solar_logger", "solar logger", "solar_logger.service"],
-        "solarpulse": ["solarpulse", "solarpulse.service"],
-    }
-
-    matched_service = None
-    for service_name, aliases in service_aliases.items():
-        if any(alias.lower() in q for alias in aliases):
-            matched_service = service_name
-            break
-
-    if any(x in q for x in [
-        "which services are down",
-        "what services are down",
-        "which service is down",
-        "what service is down",
-        "is anything broken",
-        "any broken services",
-        "service issues",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/services/overview",
-        }
-
-    if any(x in q for x in [
-        "which nodes have service issues",
-        "which node has service issues",
-        "which nodes have broken services",
-        "which nodes have service warnings",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/services/overview",
-        }
-
-    if (
-        ("service" in q or "services" in q)
-        and any(x in q for x in ["doing", "overview", "status", "health"])
-        and matched_node is None
-        and matched_service is None
-    ):
-        return {
-            "type": "route",
-            "target": "/ai/services/overview",
-        }
-
-    if (
-        ("service" in q or "services" in q or "ollama" in q or "house-agent" in q)
-        and any(x in q for x in ["health", "status", "running", "alive", "up"])
-        and any(x in q for x in ["local", "this server", "ai-server", "on server"])
-        and matched_node is None
-        and matched_service is None
-    ):
-        return {"type": "route", "target": "/ai/service/health"}
-
-    if (
-        ("service" in q or "services" in q)
-        and any(x in q for x in ["doing", "health", "status", "overview", "issues", "warnings", "running"])
-        and matched_node
-    ):
-        return {
-            "type": "route",
-            "target": "/ai/service/summary",
-            "params": {"node": matched_node},
-        }
-
-    if (
-        ("service" in q or "services" in q)
-        and any(x in q for x in ["doing", "health", "status", "overview", "issues", "warnings", "running"])
-    ):
-        return {
-            "type": "route",
-            "target": "/ai/services/overview",
-        }
-
-    if matched_service and matched_node and any(x in q for x in ["running", "active", "status", "ok", "healthy"]):
-        return {
-            "type": "route",
-            "target": "/ai/service/summary",
-            "params": {
-                "node": matched_node,
-                "service_hint": matched_service,
-            },
-        }
-
-    if matched_service and any(x in q for x in ["running", "active", "status", "ok", "healthy"]):
-        return {
-            "type": "route",
-            "target": "/ai/services/overview",
-        }
-
-    if (
-        ("node" in q or "nodes" in q or "pis" in q or "systems" in q)
-        and any(x in q for x in ["doing", "health", "status", "overview", "ok", "alive", "warnings"])
-    ):
-        return {"type": "route", "target": "/ai/nodes/health"}
-
-    if matched_node and any(x in q for x in [
-        "status", "health", "overloaded", "busy", "load", "ram", "cpu",
-        "memory", "swap", "warning", "alarms", "doing",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/node/summary",
-            "params": {"node": matched_node},
-        }
-
-    if any(x in q for x in [
-        "power now", "current power", "house power", "current consumption",
-        "consumption now", "grid power", "how much power",
-    ]):
-        return {"type": "route", "target": "/ai/power_now"}
-
-    if any(x in q for x in [
-        "excess electricity",
-        "excess energy",
-        "surplus power",
-        "surplus energy",
-        "free electricity",
-        "available solar",
-        "spare solar",
-        "extra solar",
-        "do we have excess",
-        "is there excess energy",
-        "can we use extra power",
-    ]):
-        return {"type": "route", "target": "/ai/unified_energy_summary"}
-
-    if any(x in q for x in [
-        "which rooms are occupied",
-        "what rooms are occupied",
-        "which rooms are active",
-        "what rooms are active",
-        "occupied right now",
-        "room occupancy",
-        "occupancy",
-        "house sensors",
-        "house sensor",
-        "sensor overview",
-        "sensor state",
-        "room activity",
-        "is anyone home",
-        "is anyone in the",
-        "is the living room occupied",
-        "is the bathroom occupied",
-        "is the desk room occupied",
-        "is the deskroom occupied",
-        "is the entrance room occupied",
-        "is the entrance occupied",
-        "lights on",
-        "which lights are on",
-        "what lights are on",
-        "active lights",
-        "lighting active",
-        "active motion",
-        "where is motion",
-        "which rooms have no clear live sensor data",
-        "what rooms have no clear live sensor data",
-        "which rooms have no live sensor data",
-        "what rooms have no live sensor data",
-        "which rooms have no sensor data",
-        "what rooms have no sensor data",
-        "unknown sensor rooms",
-        "rooms with unknown sensor state",
-        "rooms with no clear live data",
-        "which rooms are idle",
-        "what rooms are idle",
-        "idle rooms",
-        "which rooms show activity without presence",
-        "what rooms show activity without presence",
-        "activity without presence",
-        "active without presence",
-        "which rooms currently have presence detected",
-        "what rooms currently have presence detected",
-        "where is presence",
-        "active presence",
-        "which rooms have motion right now",
-        "what rooms have motion right now",
-        "which rooms have lights on right now",
-        "what rooms have lights on right now",
-        "what is happening in the",
-        "what's happening in the",
-        "give me the current state of the",
-        "current state of the",
-        "what sensors are active in the",
-        "what sensors are active in ",
-        "what is active in the",
-        "what is active in ",
-        "what is happening in the",
-        "what is happening in ",
-        "what's happening in the",
-        "what's happening in ",
-        "give me the current state of the",
-        "give me the current state of ",
-        "current state of the",
-        "current state of ",
-        "what sensors are active in the",
-        "what sensors are active in ",
-        "what is active in the",
-        "what is active in ",
-        "what is happening in the",
-        "what is happening in ",
-        "what's happening in the",
-        "what's happening in ",
-        "give me the current state of the",
-        "give me the current state of ",
-        "current state of the",
-        "current state of ",
-        "why is the",
-        "why is ",
-        "which room is most active",
-        "what room is most active",
-        "most active room",
-        "most important active room",
-        "which rooms are likely being used",
-        "what rooms are likely being used",
-        "likely human active rooms",
-        "likely occupied rooms",
-        "rooms likely in use",
-        "which rooms are likely automation noise",
-        "which rooms were recently used by a person",
-        "what rooms were recently used by a person",
-        "recently used by a person",
-        "recent human activity",
-        "which rooms had recent human activity",
-        "what rooms had recent human activity",
-        "rooms likely being used",
-        "which rooms are likely being used",
-        "what rooms are likely being used",
-        "which rooms are probably being used",
-        "what rooms are probably being used",
-        "which room is most active",
-        "what room is most active",
-        "which rooms are probably just background automation",
-        "what rooms are probably just background automation",
-        "background automation",
-        "background activity",
-        "automation noise",
-        "which rooms look like automation",
-        "what rooms look like automation",
-        "is anyone downstairs",
-        "anyone downstairs",
-        "is anyone upstairs",
-        "anyone upstairs",
-        "is anyone in the attic",
-        "anyone in the attic",
-        "which rooms downstairs are occupied",
-        "what rooms downstairs are occupied",
-        "which downstairs rooms are occupied",
-        "what downstairs rooms are occupied",
-        "which rooms upstairs are occupied",
-        "what rooms upstairs are occupied",
-        "which upstairs rooms are occupied",
-        "what upstairs rooms are occupied",
-        "which rooms downstairs are being used",
-        "what rooms downstairs are being used",
-        "which downstairs rooms are being used",
-        "what downstairs rooms are being used",
-        "which rooms upstairs are being used",
-        "what rooms upstairs are being used",
-        "which upstairs rooms are being used",
-        "what upstairs rooms are being used",
-        "attic occupancy",
-        "upstairs occupancy",
-        "downstairs occupancy",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/house_sensors",
-            "params": {
-                "minutes": 60,
-                "limit": 8000,
-            },
-            "reason": "house_sensor_occupancy_query",
-        }
-
-    history_route = route_history_question(question)
-    if history_route and history_route.get("status") == "ok" and history_route.get("target"):
-        return {
-            "type": "route",
-            "target": history_route["target"],
-            "params": history_route.get("params", {}),
-            "reason": history_route.get("reason", "history_router"),
-        }
-
-    if any(x in q for x in [
-        "energy today", "usage today", "used today", "today usage",
-    ]):
-        return {"type": "route", "target": "/ai/energy_today"}
-
-    if any(x in q for x in [
-        "energy summary", "house energy summary", "power summary",
-    ]):
-        return {"type": "route", "target": "/ai/energy_summary"}
-
-    if any(x in q for x in [
-        "solar", "pv", "inverter", "sma", "solar production", "how much solar",
-        "grid import", "grid export", "importing from the grid", "exporting to the grid",
-        "energy flow", "power flow", "house load", "house usage", "using now",
-        "current house usage", "current house load", "solar vs grid",
-    ]):
-        return {"type": "route", "target": "/ai/unified_energy_summary"}
-
-    if any(x in q for x in [
-        "cheapest hours", "cheap electricity", "best hours to use power",
-    ]):
-        return {"type": "route", "target": "/ai/cheapest_hours_today"}
-
-    if any(x in q for x in [
-        "electricity price", "price now", "current electricity price", "power price",
-    ]):
-        return {"type": "route", "target": "/ai/electricity_price_now"}
-
-    if any(x in q for x in [
-        "salt level", "softener salt",
-    ]):
-        return {"type": "route", "target": "/ai/salt_tank_level"}
-
-    if any(x in q for x in [
-        "water temperature", "water temperatures",
-    ]):
-        return {"type": "route", "target": "/ai/water_temperatures"}
-
-    if any(x in q for x in [
-        "water softener", "softener overview",
-    ]):
-        return {"type": "route", "target": "/ai/water_softener_overview"}
-
-    if any(x in q for x in [
-        "pdata gas", "gas summary",
-    ]):
-        return {"type": "route", "target": "/ai/pdata_gas_summary"}
-
-    if any(x in q for x in [
-        "pdata overview", "full pdata overview",
-    ]):
-        return {"type": "route", "target": "/ai/pdata_full_overview"}
-
-    if any(x in q for x in [
-        "system health overview",
-        "system overview",
-        "technical overview",
-        "technical house status",
-        "technical status",
-        "house infrastructure overview",
-        "node health overview",
-        "node overview",
-        "which nodes have issues",
-        "what nodes have issues",
-        "which nodes are offline",
-        "what nodes are offline",
-        "monitoring overview",
-        "service monitoring overview",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/house_state",
-            "params": {"summary_mode": "system"},
-        }
-
-    if any(x in q for x in [
-        "house state", "house summary", "house overview",
-        "house diagnostics", "house status",
-        "full house state", "current house state",
-    ]):
-        return {
-            "type": "route",
-            "target": "/ai/house_state",
-            "params": {"summary_mode": "overview"},
-        }
-
-    if any(x in q for x in [
-        "playback state", "audio state", "voice playback state",
-        "is audio playing", "is the house speaking",
-    ]):
-        return {"type": "route", "target": "/ai/playback_state"}
-
-    if any(x in q for x in [
-        "full status", "system status", "health status",
-    ]):
-        return {"type": "route", "target": "/status/full"}
-
-    return None
-
-
-
-
-def _fmt_num(value, digits: int = 2) -> str:
-    try:
-        return f"{float(value):.{digits}f}"
-    except Exception:
-        return str(value)
-
-
-def _kw(value):
-    try:
-        return round(float(value) / 1000.0, 2)
-    except Exception:
-        return None
-
-
-def _fmt(value, unit=""):
-    try:
-        return f"{round(float(value), 2)}{unit}"
-    except Exception:
-        return str(value)
-
-
-
-def _get_room_zone(room_name: str) -> str:
-    name = str(room_name or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
-
-    if not name:
-        return "outside_misc"
-
-    if "upstair" in name:
-        return "upstairs"
-
-    if "downstair" in name:
-        return "downstairs"
-
-    if name in {
-        "bathroom",
-        "deskroom",
-        "childroom",
-        "masterbedroom",
-        "hallwayroom",
-    }:
-        return "upstairs"
-
-    if name in {
-        "attickroom",
-        "atticroom",
-    }:
-        return "attic"
-
-    if name in {
-        "livingroom",
-        "kitchenroom",
-        "diningroom",
-        "entranceroom",
-        "storageroom",
-        "wcroom",
-    }:
-        return "downstairs"
-
-    return "outside_misc"
-
-
-
-
-def _human_room_label(name: str) -> str:
-    if not name:
-        return "unknown room"
-
-    normalized = str(name).strip().lower().replace("-", "").replace("_", "").replace(" ", "")
-
-    explicit = {
-        "attickroom": "attic room",
-        "atticroom": "attic room",
-        "bathroom": "bathroom",
-        "bedroom": "bedroom",
-        "masterbedroom": "master bedroom",
-        "childroom": "child room",
-        "deskroom": "desk room",
-        "livingroom": "living room",
-        "diningroom": "dining room",
-        "entranceroom": "entrance room",
-        "hallwayroom": "hallway",
-        "kitchenroom": "kitchen",
-        "storageroom": "storage room",
-        "powerroom": "power room",
-        "gardenroom": "garden room",
-        "terrasroom": "terrace",
-        "wcroom": "WC",
-        "toiletroom": "toilet",
-        "iotroom": "IoT room",
-        "trapboven": "upstairs stairs",
-        "trapbeneden": "downstairs stairs",
-    }
-
-    if normalized in explicit:
-        return explicit[normalized]
-
-    cleaned = str(name).strip().replace("_", " ").replace("-", " ")
-    if cleaned.lower().endswith("room"):
-        cleaned = cleaned[:-4].strip() + " room"
-
-    return " ".join(cleaned.split())
-
-
-def _is_noise_room(name: str) -> bool:
-    room = str(name or "").strip().lower()
-    return room in {"not assigned", "unknown", ""}
-
-
-def _join_natural(items):
-    items = [str(x).strip() for x in items if str(x).strip()]
-    if not items:
-        return ""
-    if len(items) == 1:
-        return items[0]
-    if len(items) == 2:
-        return f"{items[0]} and {items[1]}"
-    return f"{', '.join(items[:-1])}, and {items[-1]}"
-
-
-def _summarize_service_warnings(services: dict) -> list[str]:
-    warning_nodes = []
-    offline_nodes = []
-
-    for node_name, item in (services or {}).items():
-        overall = str(item.get("overall_status") or "").lower()
-        if overall == "warning":
-            warning_nodes.append(node_name)
-        elif overall in {"error", "offline", "offline_or_error"}:
-            offline_nodes.append(node_name)
-
-    parts = []
-    if warning_nodes:
-        parts.append(f"Some services still need attention on {_join_natural(warning_nodes)}.")
-    if offline_nodes:
-        parts.append(f"Service monitoring is unavailable on {_join_natural(offline_nodes)}.")
-    return parts
+ROOM_ACTIVITY_DB_PATH = os.environ.get(
+    "HOUSE_ROOM_ACTIVITY_DB_PATH",
+    "/home/jnoppe/house-agent/data/room_activity_state.db",
+)
+
+_ROOM_ACTIVITY_DB_LOCK = threading.Lock()
 
 
 def _safe_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        v = value.strip().lower()
+        return v in {"1", "true", "yes", "on", "open", "active", "occupied", "detected"}
     return bool(value)
 
 
@@ -878,1279 +53,11 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
-def _room_signal_control_names(items: list, limit: int = 5) -> list[str]:
-    names = []
-    for item in items[:limit]:
-        name = item.get("control_name")
-        if name:
-            name_str = str(name).replace("_", " ").strip()
-            if name_str and name_str not in names:
-                names.append(name_str)
-    return names
-
-
-def _extract_room_signals(room: dict) -> dict:
-    lighting = room.get("lighting") or {}
-    motion = room.get("motion") or {}
-    presence = room.get("presence") or {}
-    climate = room.get("climate") or {}
-    access_security = room.get("access_security") or {}
-    activity = room.get("activity") or {}
-
-    active_signals = access_security.get("active_signals") or []
-    status_signals = access_security.get("status_signals") or []
-    alert_signals = access_security.get("alert_signals") or []
-
-    binary_on_count = _safe_int(activity.get("binary_on_count"), 0)
-    telemetry_count = _safe_int(activity.get("telemetry_count"), 0)
-
-    temp_actual = _safe_float(climate.get("temperature_actual"))
-    temp_target = _safe_float(climate.get("temperature_target"))
-    humidity = _safe_float(climate.get("humidity"))
-    co2 = _safe_float(climate.get("co2"))
-    open_window = climate.get("open_window")
-
-    presence_on = _safe_bool(presence.get("is_active"))
-    motion_on = _safe_bool(motion.get("is_active"))
-    lights_on = _safe_bool(lighting.get("is_on"))
-
-    access_on = len(active_signals) > 0 or len(status_signals) > 0
-    security_on = len(alert_signals) > 0
-    climate_on = any(v is not None for v in [temp_actual, temp_target, humidity, co2, open_window])
-    generic_activity_on = binary_on_count > 0 or telemetry_count > 0 or str(room.get("room_status") or "").strip().lower() == "active_no_presence"
-
-    return {
-        "presence": presence_on,
-        "motion": motion_on,
-        "access": access_on,
-        "security": security_on,
-        "lighting": lights_on,
-        "climate": climate_on,
-        "generic_activity": generic_activity_on,
-        "binary_on_count": binary_on_count,
-        "telemetry_count": telemetry_count,
-        "temp_actual": temp_actual,
-        "temp_target": temp_target,
-        "humidity": humidity,
-        "co2": co2,
-        "open_window": open_window,
-        "active_signal_names": _room_signal_control_names(active_signals, limit=5),
-        "status_signal_names": _room_signal_control_names(status_signals, limit=5),
-        "alert_signal_names": _room_signal_control_names(alert_signals, limit=5),
-    }
-
-
-_REASON_PRIORITY = [
-    "presence",
-    "motion",
-    "access",
-    "security",
-    "lighting",
-    "climate",
-    "generic_activity",
-]
-
-
-def _infer_activity_reason(signals: dict) -> dict:
-    active_reasons = [reason for reason in _REASON_PRIORITY if signals.get(reason)]
-
-    if not active_reasons:
-        return {
-            "is_active": False,
-            "primary_reason": None,
-            "secondary_reasons": [],
-            "confidence": "low",
-        }
-
-    primary = active_reasons[0]
-    secondary = active_reasons[1:]
-
-    if primary in {"presence", "motion"}:
-        confidence = "high"
-    elif primary in {"access", "security", "lighting", "climate"}:
-        confidence = "medium"
-    else:
-        confidence = "low"
-
-    return {
-        "is_active": True,
-        "primary_reason": primary,
-        "secondary_reasons": secondary,
-        "confidence": confidence,
-    }
-
-
-def _build_reason_code(primary: Optional[str], secondary: list[str]) -> str:
-    if not primary:
-        return "inactive"
-    if secondary:
-        return f"{primary}_with_" + "_and_".join(secondary[:3])
-    return primary
-
-
-def _build_reason_details(signals: dict, primary: Optional[str], secondary: list[str]) -> list[str]:
-    details = []
-
-    if signals.get("presence"):
-        details.append("Presence is currently active.")
-    else:
-        details.append("Presence is not currently active.")
-
-    if signals.get("motion"):
-        details.append("Motion is currently active.")
-    else:
-        details.append("Motion is not currently active.")
-
-    if signals.get("lighting"):
-        details.append("Lighting is currently on.")
-    else:
-        details.append("Lighting is currently off.")
-
-    access_names = signals.get("active_signal_names") or []
-    status_names = signals.get("status_signal_names") or []
-    alert_names = signals.get("alert_signal_names") or []
-
-    if access_names or status_names:
-        combined = []
-        for name in access_names + status_names:
-            if name not in combined:
-                combined.append(name)
-        details.append(f"Access-related signals include {_join_natural(combined[:5])}.")
-
-    if alert_names:
-        details.append(f"Security-related alerts include {_join_natural(alert_names[:5])}.")
-
-    climate_bits = []
-    if signals.get("temp_actual") is not None:
-        climate_bits.append(f"temperature is {round(float(signals['temp_actual']), 1)} degrees")
-    if signals.get("temp_target") is not None:
-        climate_bits.append(f"target is {round(float(signals['temp_target']), 1)} degrees")
-    if signals.get("humidity") is not None:
-        climate_bits.append(f"humidity is {round(float(signals['humidity']), 1)} percent")
-    if signals.get("co2") is not None:
-        climate_bits.append(f"CO2 is {round(float(signals['co2']), 1)}")
-    if signals.get("open_window") is not None:
-        climate_bits.append(f"window is {'open' if bool(signals.get('open_window')) else 'closed'}")
-
-    if climate_bits:
-        details.append("Climate data: " + ", ".join(climate_bits) + ".")
-
-    binary_on_count = _safe_int(signals.get("binary_on_count"), 0)
-    telemetry_count = _safe_int(signals.get("telemetry_count"), 0)
-    if binary_on_count or telemetry_count:
-        details.append(
-            f"Additional room state includes {binary_on_count} active binary items and {telemetry_count} telemetry items."
-        )
-
-    if primary and secondary:
-        details.append(
-            f"Primary cause is {primary}; supporting signals include {_join_natural(secondary[:4])}."
-        )
-
-    return details
-
-
-def _build_primary_reason_summary(room_name: str, signals: dict, reason: dict) -> str:
-    primary = reason.get("primary_reason")
-    no_presence = not signals.get("presence")
-    no_motion = not signals.get("motion")
-
-    if primary == "presence":
-        if signals.get("motion"):
-            return f"The {room_name} is active because presence is currently detected, with motion also indicating recent activity."
-        return f"The {room_name} is active because presence is currently detected."
-
-    if primary == "motion":
-        if no_presence:
-            return f"The {room_name} is active due to motion, but no presence is currently detected."
-        return f"The {room_name} is active due to motion."
-
-    if primary == "access":
-        if no_presence and no_motion:
-            return f"The {room_name} is active due to recent access-related signals, but no presence or motion is currently detected."
-        return f"The {room_name} is active due to access-related state changes."
-
-    if primary == "security":
-        return f"The {room_name} is active because a security-related state is currently active."
-
-    if primary == "lighting":
-        if no_presence and no_motion:
-            return f"The {room_name} appears active mainly because lights are on, without confirmed presence or motion."
-        return f"The {room_name} is active with lighting currently on."
-
-    if primary == "climate":
-        if no_presence and no_motion:
-            return f"The {room_name} shows activity mainly from climate-related state changes, without signs of occupancy."
-        return f"The {room_name} is active with climate-related state changes."
-
-    if primary == "generic_activity":
-        if no_presence and no_motion:
-            return f"The {room_name} is active from general room state changes, but no stronger cause is currently visible."
-        return f"The {room_name} is active from general room state changes."
-
-    return f"The {room_name} currently appears inactive."
-
-
-def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
-    """
-    Human-readable explanation of why a room looks active.
-    Works with the real nested /ai/house_sensors payload.
-    """
-    normalized = _extract_room_signal_snapshot(room_name, room_payload)
-    profile = _get_room_role_profile(room_name, normalized)
-    recency = _build_room_recency_snapshot(room_name, normalized, now_ts=now_ts)
-
-    presence = _safe_bool(normalized.get("presence"))
-    motion = _safe_bool(normalized.get("motion"))
-    lights_on = _safe_bool(normalized.get("lights_on"))
-    access_active = _safe_bool(normalized.get("access_active"))
-    climate_active = _safe_bool(normalized.get("climate_active"))
-
-    reasons = []
-    primary = "unknown"
-    secondary = None
-    confidence = "low"
-
-    if presence:
-        primary = "presence_detected"
-        confidence = "high"
-        reasons.append("presence is currently detected")
-
-        if motion:
-            secondary = "motion_detected"
-            reasons.append("motion is also active")
-
-        if lights_on:
-            reasons.append("lights are on")
-
-    elif motion:
-        if recency["motion_recency_band"] == "fresh":
-            primary = "recent_motion"
-            confidence = "medium"
-            reasons.append("recent motion suggests recent human activity")
-        else:
-            primary = "stale_motion"
-            confidence = "low"
-            reasons.append("motion was seen earlier, but it is no longer very recent")
-
-        if lights_on:
-            secondary = "lights_on"
-            reasons.append("lights remain on")
-
-    elif access_active:
-        primary = "access_triggered"
-        confidence = "low"
-        reasons.append("there was an access-related trigger")
-        reasons.append("access alone is not strong proof of ongoing presence")
-
-        if lights_on:
-            secondary = "lights_on"
-            reasons.append("lights remain on after access activity")
-
-    elif lights_on:
-        primary = "lights_only"
-        confidence = "low"
-        reasons.append("lights are on without stronger live human signals")
-
-    elif climate_active:
-        primary = "background_automation"
-        confidence = "low"
-        reasons.append("climate or automation activity is present")
-        reasons.append("this looks more like background system behavior")
-
-    else:
-        if recency["presence_recency_band"] == "fresh":
-            primary = "recent_presence_memory"
-            confidence = "medium"
-            reasons.append("this room had recent strong presence memory")
-        elif recency["motion_recency_band"] in {"fresh", "aging"}:
-            primary = "recent_motion_memory"
-            confidence = "low"
-            reasons.append("this room had recent motion memory")
-        else:
-            primary = "idle"
-            confidence = "low"
-            reasons.append("no strong activity signals are currently active")
-
-    if profile["role"] in {"transitional", "bathroom", "utility"} and primary in {
-        "recent_motion",
-        "stale_motion",
-        "lights_only",
-        "access_triggered",
-        "recent_motion_memory",
-    }:
-        reasons.append(f"{profile['role']} rooms should decay faster than true occupied rooms")
-
-    return {
-        "activity_reason": "; ".join(reasons),
-        "activity_reason_primary": primary,
-        "activity_reason_secondary": secondary,
-        "activity_reason_confidence": confidence,
-    }
-
-
-
-def _get_room_activity_reason(room: dict) -> dict:
-    existing = room.get("activity_reason")
-    if isinstance(existing, dict) and existing:
-        return existing
-
-    analysis = _analyze_room_activity_reason(room)
-    return analysis.get("activity_reason", {})
-
-
-
-
-
-
-def _summarize_house_state(data: dict, action: dict) -> str:
-    params = (action or {}).get("params") or {}
-    summary_mode = str(params.get("summary_mode") or "overview").strip().lower()
-
-    if summary_mode not in {"overview", "briefing", "system"}:
-        summary_mode = "overview"
-
-    try:
-        summary_text = summarize_house_state(data, mode=summary_mode)
-        if summary_text:
-            return summary_text
-    except Exception:
-        pass
-
-    summary = data.get("summary", {}) or {}
-    interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
-    power_watts = summary.get("current_power_watts")
-
-    if interpreted_house_load_kw is not None:
-        try:
-            if summary_mode == "system":
-                offline_nodes = summary.get("offline_nodes") or []
-                warning_nodes_count = summary.get("warning_nodes_count")
-                service_warning_hosts = summary.get("service_warning_hosts") or []
-                monitoring_unavailable_nodes = summary.get("monitoring_unavailable_nodes") or []
-
-                parts = [
-                    f"Current interpreted house load is {round(float(interpreted_house_load_kw), 2)} kilowatts."
-                ]
-                if offline_nodes:
-                    parts.append(f"Offline nodes: {', '.join(offline_nodes)}.")
-                if warning_nodes_count:
-                    parts.append(f"Nodes with warnings: {warning_nodes_count}.")
-                if service_warning_hosts:
-                    parts.append(f"Service warnings are present on: {', '.join(service_warning_hosts)}.")
-                if monitoring_unavailable_nodes:
-                    parts.append(f"Service monitoring is unavailable on: {', '.join(monitoring_unavailable_nodes)}.")
-                return " ".join(parts)
-
-            return f"The house is currently using {round(float(interpreted_house_load_kw), 2)} kilowatts."
-        except Exception:
-            return "The house state is available, but the summary could not be fully rendered."
-
-    if power_watts is not None:
-        try:
-            kw = round(abs(float(power_watts)) / 1000.0, 2)
-            return f"The house is currently using about {kw} kilowatts."
-        except Exception:
-            return "The house state is available, but the summary could not be fully rendered."
-
-    return "The house state is available, but no concise overview could be generated."
-
-
-
-
-
-
-
-def _summarize_history_presence(data: dict, action: dict) -> str:
-    items = data.get("items", []) or []
-    room = (action.get("params") or {}).get("room") or "the house"
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 60))
-
-    active_items = [i for i in items if i.get("state_key") == "active" and i.get("is_active") is True]
-    event_items = [i for i in items if i.get("state_key") == "events"]
-    latest_time = None
-
-    for item in items:
-        t = item.get("time")
-        if t and (latest_time is None or t > latest_time):
-            latest_time = t
-
-    if active_items:
-        return (
-            f"Yes, I found motion or presence in {room} within the last {minutes} minutes. "
-            f"There are {len(active_items)} active presence states. "
-            f"Latest activity was at {latest_time or 'an unknown time'}."
-        )
-
-    if event_items:
-        return (
-            f"I found recent motion or presence events in {room} within the last {minutes} minutes, "
-            f"but nothing is currently marked active. Latest event was at {latest_time or 'an unknown time'}."
-        )
-
-    return f"I found no motion or presence in {room} within the last {minutes} minutes."
-
-
-def _summarize_history_binary_active(data: dict, action: dict) -> str:
-    items = data.get("items", []) or []
-    room = (action.get("params") or {}).get("room") or "the house"
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 60))
-
-    filtered = []
-    skip_state_keys = {
-        "activeSince", "time", "min", "max", "step", "nextEntryTime",
-        "prepareDuration", "ringDuration", "snoozeDuration",
-    }
-
-    for item in items:
-        state_key = str(item.get("state_key") or "")
-        value = item.get("value")
-        if state_key in skip_state_keys:
-            continue
-        if value in (None, 0, 0.0, False):
-            continue
-        filtered.append(item)
-
-    if not filtered:
-        return f"I found nothing currently active in {room} over the last {minutes} minutes."
-
-    preview = []
-    for item in filtered[:5]:
-        control_name = item.get("control_name") or "unknown control"
-        state_key = item.get("state_key") or "value"
-        value = item.get("value")
-        preview.append(f"{control_name} ({state_key}={value})")
-
-    return (
-        f"I found {len(filtered)} currently active binary states in {room} over the last {minutes} minutes. "
-        f"Examples: {'; '.join(preview)}."
-    )
-
-
-def _summarize_history_binary_changes(data: dict, action: dict) -> str:
-    items = data.get("items", []) or []
-    room = (action.get("params") or {}).get("room") or "the house"
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 60))
-
-    if not items:
-        return f"I found no recent binary changes in {room} over the last {minutes} minutes."
-
-    preview = []
-    for item in items[:5]:
-        control_name = item.get("control_name") or "unknown control"
-        state_key = item.get("state_key") or "value"
-        current_value = item.get("current_value")
-        previous_value = item.get("previous_value")
-        last_time = item.get("last_time") or item.get("first_time") or "unknown time"
-        change_count = item.get("change_count", 0)
-
-        if previous_value is None:
-            preview.append(
-                f"{control_name} ({state_key} now {current_value} at {last_time}, samples={item.get('samples', 0)})"
-            )
-        else:
-            preview.append(
-                f"{control_name} ({state_key}: {previous_value} -> {current_value} at {last_time}, changes={change_count})"
-            )
-
-    return (
-        f"I found {len(items)} recent binary changes in {room} over the last {minutes} minutes. "
-        f"Examples: {'; '.join(preview)}."
-    )
-
-
-def _summarize_history_telemetry(data: dict, action: dict) -> str:
-    items = data.get("items", []) or []
-    room = (action.get("params") or {}).get("room")
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 120))
-    scope = room or "the house"
-
-    climate_items = []
-    for item in items:
-        state_key = str(item.get("state_key") or "").lower()
-        sensor_type = str(item.get("sensor_type") or "").lower()
-        domain = str(item.get("domain") or "").lower()
-
-        if state_key in {"tempactual", "humidityactual"}:
-            climate_items.append(item)
-            continue
-
-        if sensor_type == "climate_controller" and state_key in {"tempactual", "humidityactual"}:
-            climate_items.append(item)
-            continue
-
-        if domain == "climate" and state_key in {"tempactual", "humidityactual"}:
-            climate_items.append(item)
-
-    if not climate_items:
-        return f"I found no recent temperature or humidity telemetry for {scope} in the last {minutes} minutes."
-
-    latest_by_room_and_key = {}
-    for item in climate_items:
-        key = (item.get("room") or "unknown", item.get("state_key"))
-        current_time = item.get("time") or ""
-        old = latest_by_room_and_key.get(key)
-        if old is None or current_time > (old.get("time") or ""):
-            latest_by_room_and_key[key] = item
-
-    grouped = {}
-    for (room_name, _), item in latest_by_room_and_key.items():
-        grouped.setdefault(room_name, {})
-        grouped[room_name][item.get("state_key")] = item.get("value")
-
-    preview = []
-    for room_name in sorted(grouped.keys())[:8]:
-        temp = grouped[room_name].get("tempActual")
-        hum = grouped[room_name].get("humidityActual")
-
-        parts = [room_name]
-        if temp is not None:
-            parts.append(f"temp {round(float(temp), 1)} C")
-        if hum is not None:
-            parts.append(f"humidity {round(float(hum), 1)} percent")
-
-        if len(parts) > 1:
-            preview.append(", ".join(parts))
-
-    if not preview:
-        return f"I found no recent temperature or humidity telemetry for {scope} in the last {minutes} minutes."
-
-    return (
-        f"I found recent house climate telemetry for {len(grouped)} rooms in {scope} "
-        f"over the last {minutes} minutes. {'; '.join(preview)}."
-    )
-
-
-def _summarize_history_room_activity(data: dict, action: dict) -> str:
-    items = data.get("items", []) or []
-    room = (action.get("params") or {}).get("room")
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 60))
-    room_count = int(data.get("room_count", len(items)))
-
-    if not items:
-        if room:
-            return f"I found no room activity summary for {room} in the last {minutes} minutes."
-        return f"I found no room activity in the last {minutes} minutes."
-
-    def score_item(item: dict) -> tuple:
-        room_name = str(item.get("room") or "")
-        if _is_noise_room(room_name):
-            room_penalty = -100
-        else:
-            room_penalty = 0
-
-        on_items = item.get("on_items", []) or []
-
-        presence_count = 0
-        access_count = 0
-        security_count = 0
-        heating_count = 0
-        power_count = 0
-        other_count = 0
-
-        for sub in on_items:
-            domain = str(sub.get("domain") or "").lower()
-            control_name = str(sub.get("control_name") or "").lower()
-
-            if domain == "presence":
-                presence_count += 1
-            elif domain == "access":
-                access_count += 1
-            elif domain == "security":
-                security_count += 1
-            elif domain == "heating":
-                heating_count += 1
-            elif domain == "power":
-                if any(x in control_name for x in ["picore", "psu_switch", "power_switch"]):
-                    power_count += 1
-                else:
-                    other_count += 1
-            else:
-                other_count += 1
-
-        activity_score = (
-            presence_count * 100
-            + access_count * 60
-            + security_count * 50
-            + heating_count * 20
-            + other_count * 15
-            + max(0, item.get("binary_on_count", 0) - power_count) * 10
-            + item.get("telemetry_count", 0) * 0.1
-            + room_penalty
-        )
-
-        return (
-            activity_score,
-            presence_count,
-            access_count,
-            security_count,
-            item.get("binary_on_count", 0),
-            item.get("telemetry_count", 0),
-        )
-
-    filtered_items = []
-    for item in items:
-        room_name = str(item.get("room") or "")
-        if _is_noise_room(room_name):
-            continue
-        filtered_items.append(item)
-
-    if room:
-        first = filtered_items[0] if filtered_items else items[0]
-        active_count = first.get("binary_on_count", 0)
-        state_count = first.get("binary_state_count", 0)
-        latest_time = first.get("latest_time") or "unknown time"
-
-        presence_now = 0
-        on_items = first.get("on_items", []) or []
-        for sub in on_items:
-            if str(sub.get("domain") or "").lower() == "presence":
-                presence_now += 1
-
-        if presence_now > 0:
-            return (
-                f"I summarized activity for {_human_room_label(room)} over the last {minutes} minutes. "
-                f"There is active presence there now. "
-                f"It has {active_count} active items out of {state_count} tracked binary states. "
-                f"Latest activity was at {latest_time}."
-            )
-
-        return (
-            f"I summarized activity for {_human_room_label(room)} over the last {minutes} minutes. "
-            f"It has {active_count} active items out of {state_count} tracked binary states. "
-            f"Latest activity was at {latest_time}."
-        )
-
-    ranked = sorted(filtered_items, key=score_item, reverse=True)
-    top_rooms = [_human_room_label(item.get("room")) for item in ranked[:5]]
-
-    active_presence_rooms = []
-    for item in ranked:
-        room_name = item.get("room")
-        on_items = item.get("on_items", []) or []
-        if any(str(sub.get("domain") or "").lower() == "presence" for sub in on_items):
-            active_presence_rooms.append(_human_room_label(room_name))
-
-    active_presence_rooms = active_presence_rooms[:5]
-
-    parts = [
-        f"I summarized room activity for {room_count} rooms over the last {minutes} minutes."
-    ]
-
-    if top_rooms:
-        parts.append(f"Most active rooms were {_join_natural(top_rooms)}.")
-
-    if active_presence_rooms:
-        parts.append(f"Active presence is currently detected in {_join_natural(active_presence_rooms)}.")
-
-    return " ".join(parts)
-
-
-def _summarize_history_last_change(data: dict, action: dict) -> str:
-    controls_count = int(data.get("controls_count", 0))
-    rooms_count = int(data.get("rooms_count", 0))
-    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 60))
-
-    if controls_count == 0:
-        return f"I found no recent last-change data in the last {minutes} minutes."
-
-    return (
-        f"I found last-change information for {controls_count} controls across "
-        f"{rooms_count} rooms in the last {minutes} minutes."
-    )
-
-
-def _summarize_node_health(data: dict) -> str:
-    payload = data.get("data", {}) if isinstance(data, dict) else {}
-    if not isinstance(payload, dict) or not payload:
-        return "I could not read any node health data."
-
-    total = len(payload)
-    warning_nodes = []
-    offline_nodes = []
-    top_cpu = None
-    top_ram = None
-    top_load = None
-
-    for node, info in payload.items():
-        status = info.get("status", "unknown")
-
-        if status == "warning":
-            warning_nodes.append(node)
-        elif status != "ok":
-            offline_nodes.append(node)
-
-        cpu = info.get("cpu_total_percent")
-        ram = info.get("ram_used_percent")
-        load1 = info.get("load1")
-
-        if cpu is not None:
-            if top_cpu is None or float(cpu) > float(top_cpu[1]):
-                top_cpu = (node, cpu)
-
-        if ram is not None:
-            if top_ram is None or float(ram) > float(top_ram[1]):
-                top_ram = (node, ram)
-
-        if load1 is not None:
-            if top_load is None or float(load1) > float(top_load[1]):
-                top_load = (node, load1)
-
-    parts = [f"I checked {total} monitored nodes."]
-
-    if offline_nodes:
-        parts.append(f"Unreachable or error nodes: {', '.join(offline_nodes)}.")
-    if warning_nodes:
-        parts.append(f"Warning state nodes: {', '.join(warning_nodes)}.")
-    if not offline_nodes and not warning_nodes:
-        parts.append("All nodes are reachable and currently report ok status.")
-
-    if top_cpu is not None:
-        parts.append(f"Highest CPU is {top_cpu[0]} at {round(float(top_cpu[1]), 2)} percent.")
-    if top_ram is not None:
-        parts.append(f"Highest RAM usage is {top_ram[0]} at {round(float(top_ram[1]), 2)} percent.")
-    if top_load is not None:
-        parts.append(f"Highest load is {top_load[0]} at {round(float(top_load[1]), 2)}.")
-
-    return " ".join(parts)
-
-
-def _summarize_node_summary(data: dict, question: str = "") -> str:
-    payload = data.get("data", {}) if isinstance(data, dict) else {}
-    if not isinstance(payload, dict) or not payload:
-        return "I could not read node summary data."
-
-    node = payload.get("hostname") or payload.get("node") or "This node"
-    cpu = payload.get("cpu_total_percent")
-    ram = payload.get("ram_used_percent")
-    load1 = payload.get("load1")
-    alarms = payload.get("active_alarm_count", 0)
-    warnings = payload.get("warnings", []) or []
-
-    q = (question or "").lower()
-
-    if "overload" in q or "overloaded" in q or "busy" in q:
-        overloaded = False
-        reasons = []
-
-        if cpu is not None and float(cpu) >= 80:
-            overloaded = True
-            reasons.append(f"CPU is high at {round(float(cpu), 2)} percent")
-        if ram is not None and float(ram) >= 85:
-            overloaded = True
-            reasons.append(f"RAM usage is high at {round(float(ram), 2)} percent")
-        if load1 is not None and float(load1) >= 2.0:
-            reasons.append(f"load is {round(float(load1), 2)}")
-
-        if alarms and int(alarms) > 0:
-            overloaded = True
-            reasons.append(f"{alarms} active alarms")
-
-        if warnings:
-            reasons.append(f"warnings: {', '.join(warnings)}")
-
-        if overloaded:
-            return f"{node} does look stressed right now. " + ". ".join(reasons) + "."
-        return (
-            f"{node} does not look overloaded right now. "
-            f"CPU is {round(float(cpu), 2) if cpu is not None else 'unknown'} percent, "
-            f"RAM is {round(float(ram), 2) if ram is not None else 'unknown'} percent, "
-            f"load is {round(float(load1), 2) if load1 is not None else 'unknown'}, "
-            f"active alarms are {alarms}, "
-            f"and warnings are {', '.join(warnings) if warnings else 'none'}."
-        )
-
-    if warnings:
-        return (
-            f"{node} is reporting warning status. "
-            f"Warnings detected: {', '.join(warnings)}. "
-            f"CPU is {round(float(cpu), 2) if cpu is not None else 'unknown'} percent, "
-            f"RAM usage is {round(float(ram), 2) if ram is not None else 'unknown'} percent, "
-            f"load is {round(float(load1), 2) if load1 is not None else 'unknown'}, "
-            f"and active alarms are {alarms}."
-        )
-
-    return (
-        f"{node} is reporting {payload.get('health_status', 'ok')} status. "
-        f"CPU is {round(float(cpu), 2) if cpu is not None else 'unknown'} percent, "
-        f"RAM usage is {round(float(ram), 2) if ram is not None else 'unknown'} percent, "
-        f"load is {round(float(load1), 2) if load1 is not None else 'unknown'}, "
-        f"and active alarms are {alarms}."
-    )
-
-
-def _build_answer_from_safe_result(action, result, question: str = ""):
-    if result.get("status") != "ok":
-        return "I could not complete that request."
-
-    data = result.get("data", {}) or {}
-    target = action.get("target", "")
-
-    if target == "/ai/nodes/health":
-        return _summarize_node_health(data)
-
-    if target == "/ai/node/summary":
-        return _summarize_node_summary(data, question=question)
-
-    if target == "/ai/node/alerts":
-        payload = data.get("data", {}) if isinstance(data, dict) else {}
-        alarms = payload.get("alarms", {}) if isinstance(payload, dict) else {}
-        active = []
-        for _, alarm in alarms.items():
-            if alarm.get("status") in ("WARNING", "CRITICAL"):
-                active.append(alarm)
-
-        if not active:
-            return "There are no active node alerts."
-        return f"I found {len(active)} active node alerts."
-
-    if target == "/ai/house_state_summary":
-        room_count = data.get("room_count", 0)
-        error_count = data.get("error_count", 0)
-        return f"I retrieved the current house state summary for {room_count} rooms with {error_count} errors."
-
-    if target == "/ai/house_state":
-        return _summarize_house_state(data, action)
-
-    if target == "/ai/house_sensors":
-        return _summarize_house_sensors(data, action, question=question)
-
-    if target == "/ai/playback_state":
-        effective = data.get("effective", {}) if isinstance(data, dict) else {}
-        audio_state = data.get("audio_state", {}) if isinstance(data, dict) else {}
-        conversation_state = data.get("conversation_state", {}) if isinstance(data, dict) else {}
-
-        if effective.get("active"):
-            room = effective.get("effective_target_room") or "unknown room"
-            player = effective.get("effective_target_player") or "unknown player"
-            source = effective.get("source") or "unknown source"
-            return f"Playback is active in {room} on player {player}. Source is {source}. Wake suppression is enabled."
-
-        if effective.get("suppress_wake"):
-            return "Playback is not active, but wake suppression is still enabled during cooldown."
-
-        if audio_state.get("is_playing"):
-            target_name = audio_state.get("active_target") or "unknown target"
-            player = audio_state.get("active_player_id") or "unknown player"
-            return f"Audio is currently playing on {target_name} using player {player}."
-
-        if conversation_state.get("active"):
-            room = conversation_state.get("target_room") or "unknown room"
-            return f"The conversation manager still shows active playback context for {room}, but no direct audio playback is active."
-
-        return "No audio playback is active and wake suppression is not enabled."
-
-    if target == "/ai/loxone_history_presence_ai":
-        return _summarize_history_presence(data, action)
-
-    if target == "/ai/loxone_history_binary_active":
-        return _summarize_history_binary_active(data, action)
-
-    if target == "/ai/loxone_history_binary_changes":
-        return _summarize_history_binary_changes(data, action)
-
-    if target == "/ai/loxone_history_telemetry_latest":
-        return _summarize_history_telemetry(data, action)
-
-    if target == "/ai/loxone_history_room_activity_ai":
-        return _summarize_history_room_activity(data, action)
-
-    if target == "/ai/loxone_history_last_change":
-        return _summarize_history_last_change(data, action)
-
-    if target == "/ai/power_now":
-        watts = data.get("power_watts")
-        if watts:
-            return f"The house is currently using {_fmt(_kw(watts), ' kilowatts')}."
-        return "I could not read the current power."
-
-    if target == "/ai/sma_summary":
-        power = data.get("power_watts") or data.get("ac_power")
-        daily = data.get("daily_energy")
-        parts = []
-        if power:
-            parts.append(f"{_fmt(_kw(power), ' kilowatts')} right now")
-        if daily:
-            parts.append(f"{_fmt(daily, ' kilowatt hours today')}")
-        if parts:
-            return "Solar is producing " + " and ".join(parts) + "."
-        return "I could not read the solar data."
-
-    if target == "/ai/electricity_price_now":
-        price = data.get("price")
-        if price:
-            return f"Electricity currently costs {_fmt(price, ' euro per kilowatt hour')}."
-        return "I could not read the electricity price."
-
-    if target == "/ai/unified_energy_summary":
-        structured = data.get("structured", {})
-        solar = structured.get("solar_power_kw")
-        grid_in = structured.get("grid_import_kw")
-        grid_out = structured.get("grid_export_kw")
-        load = structured.get("estimated_house_load_kw")
-        net_grid = structured.get("net_grid_kw")
-
-        q = (question or "").lower()
-
-        if any(x in q for x in ["solar", "pv", "inverter", "sma", "solar production"]):
-            if solar is not None:
-                return f"Solar is currently producing {_fmt(solar, ' kilowatts')}."
-            return "I could not read current solar production."
-
-        if any(x in q for x in ["grid", "import", "export", "importing from the grid", "exporting to the grid"]):
-            if grid_out is not None and float(grid_out) > 0:
-                return f"The house is currently exporting {_fmt(grid_out, ' kilowatts')} to the grid."
-            if grid_in is not None:
-                return f"The house is currently importing {_fmt(grid_in, ' kilowatts')} from the grid."
-            if net_grid is not None:
-                return f"Net grid flow is currently {_fmt(net_grid, ' kilowatts')}."
-            return "I could not read the current grid flow."
-
-        if any(x in q for x in ["house load", "house usage", "using now", "current house usage", "current house load", "load"]):
-            if load is not None:
-                return f"The estimated house load is {_fmt(load, ' kilowatts')} right now."
-            return "I could not read the current house load."
-
-        answer = data.get("answer")
-        if answer:
-            return answer
-
-        if load is not None:
-            return (
-                f"The house is using {_fmt(load, ' kilowatts')} right now, "
-                f"solar is producing {_fmt(solar, ' kilowatts')}, "
-                f"grid import is {_fmt(grid_in, ' kilowatts')}, "
-                f"and grid export is {_fmt(grid_out, ' kilowatts')}."
-            )
-
-        return "I could not build the unified energy summary."
-
-    if target == "/ai/energy_summary":
-        power = data.get("power_watts")
-        if power:
-            return f"The house is using {_fmt(_kw(power), ' kilowatts')} right now."
-        return "Energy data is available but incomplete."
-
-    if target == "/ai/energy_today":
-        return "Today's energy usage data has been retrieved."
-
-    if target == "/ai/water_temperatures":
-        t1 = data.get("temp1")
-        t2 = data.get("temp2")
-        if t1 and t2:
-            return f"Water temperatures are {_fmt(t1, ' degrees')} and {_fmt(t2, ' degrees')}."
-        return "Water temperature data is available."
-
-    if target == "/ai/salt_tank_level":
-        level = data.get("level_percent")
-        if level:
-            return f"The salt tank is at {_fmt(level, ' percent')}."
-        return "Salt level data is available."
-
-    if target == "/house/status":
-        return "The house systems are running normally."
-
-    if target == "/status/full":
-        return "All systems are operational."
-
-    if target == "/ai/service/summary":
-        payload = data.get("data", {}) if isinstance(data, dict) else {}
-        if not isinstance(payload, dict) or not payload:
-            return "I could not read service summary data."
-
-        node = payload.get("node", "unknown node")
-        overall = payload.get("overall_status", "unknown")
-        services = payload.get("services", []) or []
-
-        params = action.get("params", {}) or {}
-        service_hint = params.get("service_hint")
-
-        if service_hint:
-            normalized_hint = str(service_hint).lower()
-            matched = None
-            for service in services:
-                service_name = str(service.get("service", "")).lower()
-                if normalized_hint in service_name:
-                    matched = service
-                    break
-
-            if matched:
-                service_name = matched.get("service", service_hint)
-                status = matched.get("status", "unknown")
-                if status == "active":
-                    return f"{service_name} on {node} is active."
-                return f"{service_name} on {node} is {status}."
-
-            return f"I checked {node}, but I could not find a monitored service matching {service_hint}."
-
-        active_count = sum(1 for s in services if s.get("status") == "active")
-        non_active = [s for s in services if s.get("status") != "active"]
-
-        if non_active:
-            preview = ", ".join(
-                f"{s.get('service')}: {s.get('status')}"
-                for s in non_active[:5]
-            )
-            return (
-                f"{node} service health is {overall}. "
-                f"{active_count} services are active. "
-                f"Services needing attention: {preview}."
-            )
-
-        return (
-            f"{node} service health is {overall}. "
-            f"All {active_count} monitored services are active."
-        )
-
-    if target == "/ai/services/overview":
-        payload = data.get("data", {}) if isinstance(data, dict) else {}
-        if not isinstance(payload, dict) or not payload:
-            return "I could not read service overview data."
-
-        q = (question or "").lower()
-        total_nodes = len(payload)
-        nodes_with_issues = []
-        down_services = []
-
-        for node_name, node_info in payload.items():
-            services = node_info.get("services", []) or []
-            overall = node_info.get("overall_status", "unknown")
-
-            node_bad = []
-            for item in services:
-                service_name = item.get("service", "unknown service")
-                status = item.get("status", "unknown")
-
-                if status != "active":
-                    node_bad.append(f"{service_name} ({status})")
-                    down_services.append(f"{node_name}: {service_name} ({status})")
-
-            if overall != "ok" or node_bad:
-                if node_bad:
-                    nodes_with_issues.append(f"{node_name}: {', '.join(node_bad[:4])}")
-                else:
-                    nodes_with_issues.append(f"{node_name}: overall status {overall}")
-
-        if any(x in q for x in [
-            "which services are down",
-            "what services are down",
-            "which service is down",
-            "what service is down",
-            "is anything broken",
-            "any broken services",
-            "service issues",
-        ]):
-            if not down_services:
-                return f"I checked service health on {total_nodes} nodes. No monitored services are down."
-            return (
-                f"I found service issues on {len(nodes_with_issues)} nodes. "
-                f"Affected services: {'; '.join(down_services[:10])}."
-            )
-
-        if any(x in q for x in [
-            "which nodes have service issues",
-            "which node has service issues",
-            "which nodes have broken services",
-            "which nodes have service warnings",
-        ]):
-            if not nodes_with_issues:
-                return f"I checked service health on {total_nodes} nodes. No nodes currently have service issues."
-            return (
-                f"I found service issues on {len(nodes_with_issues)} nodes. "
-                f"Details: {'; '.join(nodes_with_issues[:6])}."
-            )
-
-        if not nodes_with_issues:
-            return (
-                f"I checked service health on {total_nodes} nodes. "
-                f"All monitored service nodes report ok status."
-            )
-
-        return (
-            f"I checked service health on {total_nodes} nodes. "
-            f"Nodes with service issues: {'; '.join(nodes_with_issues[:6])}."
-        )
-
-    if target == "/ai/service/health":
-        payload = data.get("data", {}) if isinstance(data, dict) else {}
-        if not isinstance(payload, dict) or not payload:
-            return "I could not read local service health."
-
-        overall = payload.get("overall_status", "unknown")
-        node = payload.get("node", "local system")
-        services = payload.get("services", []) or []
-
-        if not services:
-            return f"{node} service health is {overall}, but no monitored services were returned."
-
-        active_count = 0
-        non_active = []
-
-        for item in services:
-            service_name = item.get("service", "unknown service")
-            status = item.get("status", "unknown")
-            if status == "active":
-                active_count += 1
-            else:
-                non_active.append(f"{service_name}: {status}")
-
-        if non_active:
-            return (
-                f"{node} service health is {overall}. "
-                f"{active_count} services are active. "
-                f"Services with issues: {'; '.join(non_active)}."
-            )
-
-        return (
-            f"{node} service health is {overall}. "
-            f"All {len(services)} monitored services are active."
-        )
-
-    return "I found some data, but I could not summarize it yet."
-
-
-def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
-    action = _match_safe_action(question)
-    if action:
-        auth_result = classify_action_auth(action)
-
-        if auth_result.get("allowed") is True:
-            exec_result = execute_safe_action(action)
-
-            if (
-                action.get("target") == "/ai/house_sensors"
-                and isinstance(exec_result, dict)
-                and exec_result.get("status") == "ok"
-            ):
-                payload = exec_result.get("data")
-                if isinstance(payload, dict):
-                    exec_result["data"] = _enrich_house_sensor_payload_with_activity_reasons(payload)
-
-            answer = _build_answer_from_safe_result(action, exec_result, question=question)
-            return {
-                "status": "ok" if exec_result.get("status") == "ok" else exec_result.get("status", "error"),
-                "mode": "safe_executor",
-                "intents": ["safe_executor"],
-                "used_tools": [],
-                "tool_data": {
-                    "safe_executor": {
-                        "action": action,
-                        "result": exec_result,
-                    },
-                    "auth_policy": auth_result,
-                },
-                "answer": answer,
-                "auth_result": auth_result,
-                "executor_action": action,
-                "executor_result": exec_result,
-            }
-
-        if auth_result.get("auth_level") == "approval_required":
-            approval = get_pending_approval_service().create_request(
-                action=action,
-                auth_level=auth_result.get("auth_level"),
-                approval_method=auth_result.get("approval_method"),
-                question=question,
-                room_id=(action.get("params") or {}).get("room"),
-                requested_by="agent_query",
-                expires_in_seconds=90,
-            )
-            return {
-                "status": "ok",
-                "mode": "approval_required",
-                "intents": ["approval_required"],
-                "used_tools": [],
-                "tool_data": {
-                    "auth_policy": auth_result,
-                    "approval": approval,
-                },
-                "answer": (
-                    f"This action requires approval before execution. "
-                    f"Approval token: {approval.get('token')}."
-                ),
-                "auth_result": auth_result,
-                "approval": approval,
-                "executor_action": action,
-            }
-
-        return {
-            "status": "blocked",
-            "mode": "policy_blocked",
-            "intents": ["policy_blocked"],
-            "used_tools": [],
-            "tool_data": {
-                "auth_policy": auth_result,
-            },
-            "answer": auth_result.get("reason", "This action is blocked by policy."),
-            "auth_result": auth_result,
-            "executor_action": action,
-        }
-
-    fallback = handle_agent_question(question)
-    if isinstance(fallback, dict):
-        fallback.setdefault("mode", "fallback_agent")
-        return fallback
-
-    return {
-        "status": "ok",
-        "mode": "fallback_agent",
-        "intents": [],
-        "used_tools": [],
-        "tool_data": {},
-        "answer": str(fallback),
-    }
-
-
-
-
-
-
-ROOM_ACTIVITY_DB_PATH = os.environ.get(
-    "HOUSE_ROOM_ACTIVITY_DB_PATH",
-    "/home/jnoppe/house-agent/data/room_activity_state.db",
-)
-
-_ROOM_ACTIVITY_DB_LOCK = threading.Lock()
-
-
-def _safe_bool(value):
-    """Normalize mixed truthy/falsy sensor values into a strict boolean."""
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        v = value.strip().lower()
-        return v in {"1", "true", "yes", "on", "open", "active", "occupied", "detected"}
-    return bool(value)
-
-
-def _coerce_float(value, default=0.0):
-    """Safely convert mixed sensor values to float."""
-    try:
-        if value is None:
-            return default
-        return float(value)
-    except Exception:
-        return default
-
-
-def _utc_now_iso():
-    """Return current UTC timestamp as ISO string."""
+def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def _parse_any_timestamp(value):
-    """
-    Parse several timestamp formats into a timezone-aware datetime.
-    Supports:
-    - datetime
-    - epoch seconds
-    - ISO strings
-    - strings ending with Z
-    """
     if value is None:
         return None
 
@@ -2189,7 +96,6 @@ def _parse_any_timestamp(value):
 
 
 def _seconds_since_timestamp(value, now_ts=None):
-    """Return age in seconds since timestamp. Unknown timestamps return None."""
     ts = _parse_any_timestamp(value)
     if ts is None:
         return None
@@ -2205,7 +111,6 @@ def _seconds_since_timestamp(value, now_ts=None):
 
 
 def _get_room_activity_db_connection():
-    """Open SQLite connection for room activity state."""
     db_dir = os.path.dirname(ROOM_ACTIVITY_DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
@@ -2216,7 +121,6 @@ def _get_room_activity_db_connection():
 
 
 def _ensure_room_activity_db():
-    """Create SQLite schema for room activity state if needed."""
     with _ROOM_ACTIVITY_DB_LOCK:
         conn = _get_room_activity_db_connection()
         try:
@@ -2249,15 +153,66 @@ def _ensure_room_activity_db():
 
 
 def _normalize_room_key(room_name):
-    """Normalize room key for stable DB storage."""
     return (room_name or "").strip().lower().replace(" ", "_")
 
 
+def _extract_room_signal_snapshot(room_name, room_payload):
+    payload = room_payload or {}
+
+    presence_data = payload.get("presence") or {}
+    motion_data = payload.get("motion") or {}
+    lighting_data = payload.get("lighting") or {}
+    access_data = payload.get("access_security") or {}
+    climate_data = payload.get("climate") or {}
+    activity_data = payload.get("activity") or {}
+
+    active_access_signals = access_data.get("active_signals") or []
+    status_signals = access_data.get("status_signals") or []
+
+    access_active = bool(active_access_signals or status_signals)
+
+    climate_active = any(
+        value not in (None, 0, 0.0, False)
+        for value in [
+            climate_data.get("operating_mode"),
+            climate_data.get("temperature_target"),
+            climate_data.get("open_window"),
+        ]
+    )
+
+    normalized = {
+        "room": payload.get("room") or room_name,
+        "room_status": payload.get("room_status"),
+        "has_any_sensor_data": _safe_bool(payload.get("has_any_sensor_data")),
+        "presence": _safe_bool(presence_data.get("is_active")),
+        "motion": _safe_bool(motion_data.get("is_active")),
+        "lights_on": _safe_bool(lighting_data.get("is_on")),
+        "access_active": _safe_bool(access_active),
+        "climate_active": _safe_bool(climate_active),
+        "last_presence_at": presence_data.get("last_seen"),
+        "last_motion_at": motion_data.get("last_seen"),
+        "last_light_at": activity_data.get("latest_time") if _safe_bool(lighting_data.get("is_on")) else None,
+        "last_access_at": None,
+        "last_climate_at": activity_data.get("latest_time") if climate_active else None,
+        "last_activity_at": activity_data.get("latest_time"),
+        "last_seen_at": activity_data.get("latest_time"),
+        "updated_at": activity_data.get("latest_time"),
+    }
+
+    access_times = []
+    for item in active_access_signals + status_signals:
+        if isinstance(item, dict):
+            ts = item.get("time")
+            if ts:
+                access_times.append(ts)
+
+    if access_times:
+        normalized["last_access_at"] = max(access_times)
+
+    return normalized
+
+
 def _normalize_room_role(room_name, room_payload):
-    """
-    Infer room role from room metadata and room name.
-    This lets us treat hallway/bathroom/storage differently from desk/living/bedroom.
-    """
     payload = room_payload or {}
     name = (room_name or "").strip().lower()
 
@@ -2276,28 +231,20 @@ def _normalize_room_role(room_name, room_payload):
 
     if any(token in text for token in ["hall", "hallway", "gang", "corridor", "entrance", "entry", "landing", "stairs", "stair"]):
         return "transitional"
-
     if any(token in text for token in ["bath", "badkamer", "toilet", "wc", "shower"]):
         return "bathroom"
-
     if any(token in text for token in ["living", "woon", "salon", "tv room", "family room"]):
         return "living"
-
     if any(token in text for token in ["desk", "office", "bureau", "study", "computer"]):
         return "desk"
-
     if any(token in text for token in ["bed", "bedroom", "master", "guest room", "slaap"]):
         return "bedroom"
-
     if any(token in text for token in ["kitchen", "keuken", "dining", "eet"]):
         return "kitchen"
-
     if any(token in text for token in ["child", "kids", "kid", "nursery", "playroom"]):
         return "child"
-
     if any(token in text for token in ["attic", "zolder", "loft"]):
         return "attic"
-
     if any(token in text for token in ["storage", "closet", "utility", "iot", "server", "technical", "tech", "boiler", "meter", "garage", "shed"]):
         return "utility"
 
@@ -2305,15 +252,6 @@ def _normalize_room_role(room_name, room_payload):
 
 
 def _get_room_role_profile(room_name, room_payload):
-    """
-    Per-role decay and weighting profile.
-
-    Meaning:
-    - presence should dominate strongly everywhere
-    - motion should decay quickly in transitional rooms
-    - lights mean less in automation-heavy spaces
-    - access/NFC should never be treated as strong proof of occupancy on its own
-    """
     role = _normalize_room_role(room_name, room_payload)
 
     profiles = {
@@ -2515,7 +453,6 @@ def _get_room_role_profile(room_name, room_payload):
 
 
 def _get_decay_factor_from_age(age_seconds, recent_seconds, stale_seconds):
-    """Convert age into a smooth decay factor."""
     if age_seconds is None:
         return 0.85, "unknown"
 
@@ -2532,7 +469,6 @@ def _get_decay_factor_from_age(age_seconds, recent_seconds, stale_seconds):
 
 
 def _load_room_activity_state(room_name):
-    """Load stored room activity state from SQLite."""
     _ensure_room_activity_db()
     room_key = _normalize_room_key(room_name)
 
@@ -2553,10 +489,6 @@ def _load_room_activity_state(room_name):
 
 
 def _upsert_room_activity_state(room_name, room_payload, now_iso=None):
-    """
-    Persist latest room signal activity to SQLite.
-    Uses normalized room snapshot extracted from the real /ai/house_sensors payload.
-    """
     _ensure_room_activity_db()
 
     normalized = _extract_room_signal_snapshot(room_name, room_payload)
@@ -2607,7 +539,6 @@ def _upsert_room_activity_state(room_name, room_payload, now_iso=None):
             created_at = existing.get("created_at") or now_iso
 
             conn.execute("BEGIN IMMEDIATE")
-
             conn.execute(
                 """
                 INSERT INTO room_activity_state (
@@ -2649,7 +580,6 @@ def _upsert_room_activity_state(room_name, room_payload, now_iso=None):
                     now_iso,
                 ),
             )
-
             conn.execute("COMMIT")
 
             return {
@@ -2675,12 +605,7 @@ def _upsert_room_activity_state(room_name, room_payload, now_iso=None):
             conn.close()
 
 
-
 def _build_room_recency_snapshot(room_name, room_payload, now_ts=None):
-    """
-    Build recency snapshot from SQLite-backed room memory.
-    This is the core of persistent room awareness.
-    """
     payload = room_payload or {}
     profile = _get_room_role_profile(room_name, payload)
     state = _load_room_activity_state(room_name) or {}
@@ -2761,14 +686,6 @@ def _build_room_recency_snapshot(room_name, room_payload, now_ts=None):
 
 
 def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
-    """
-    Human-readable explanation of why a room looks active.
-
-    This version is:
-    - role-aware
-    - SQLite-backed
-    - recency-aware per signal type
-    """
     payload = room_payload or {}
     profile = _get_room_role_profile(room_name, payload)
     recency = _build_room_recency_snapshot(room_name, payload, now_ts=now_ts)
@@ -2788,14 +705,11 @@ def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
         primary = "presence_detected"
         confidence = "high"
         reasons.append("presence is currently detected")
-
         if motion:
             secondary = "motion_detected"
             reasons.append("motion is also active")
-
         if lights_on:
             reasons.append("lights are on")
-
     elif motion:
         if recency["motion_recency_band"] == "fresh":
             primary = "recent_motion"
@@ -2805,34 +719,27 @@ def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
             primary = "stale_motion"
             confidence = "low"
             reasons.append("motion was seen earlier, but it is no longer very recent")
-
         if lights_on:
             secondary = "lights_on"
             reasons.append("lights remain on")
-
     elif access_active:
         primary = "access_triggered"
         confidence = "low"
         reasons.append("there was an access-related trigger")
         reasons.append("access alone is not strong proof of ongoing presence")
-
         if lights_on:
             secondary = "lights_on"
             reasons.append("lights remain on after access activity")
-
     elif lights_on:
         primary = "lights_only"
         confidence = "low"
         reasons.append("lights are on without stronger live human signals")
-
     elif climate_active:
         primary = "background_automation"
         confidence = "low"
         reasons.append("climate or automation activity is present")
         reasons.append("this looks more like background system behavior")
-
     else:
-        # fallback to stored memory
         if recency["presence_recency_band"] == "fresh":
             primary = "recent_presence_memory"
             confidence = "medium"
@@ -2861,7 +768,6 @@ def _analyze_room_activity_reason(room_name, room_payload, now_ts=None):
         "activity_reason_secondary": secondary,
         "activity_reason_confidence": confidence,
     }
-
 
 
 def _clamp01(value):
@@ -2893,16 +799,6 @@ def _classify_room_state(
     recency: dict,
     human_activity_score: int,
 ):
-    """
-    Explicit Room Reasoning V2 classification layer.
-
-    Returns one of:
-    - occupied
-    - transient
-    - passive
-    - idle
-    - uncertain
-    """
     role = str(room_role or "general").lower()
     presence_band = str(recency.get("presence_recency_band") or "unknown").lower()
     motion_band = str(recency.get("motion_recency_band") or "unknown").lower()
@@ -2974,7 +870,6 @@ def _compute_confidence_score(
             score += 0.03
         if role in {"living", "desk", "bedroom", "kitchen", "child"}:
             score += 0.03
-
     elif classification == "transient":
         score = 0.58
         if motion:
@@ -2987,7 +882,6 @@ def _compute_confidence_score(
             score -= 0.03
         if climate_active:
             score -= 0.04
-
     elif classification == "passive":
         score = 0.60
         if lights_on:
@@ -2998,14 +892,12 @@ def _compute_confidence_score(
             score += 0.05
         if role == "utility":
             score += 0.05
-
     elif classification == "idle":
         score = 0.82
         if recency_band == "stale":
             score += 0.06
         if presence_band == "fresh" or motion_band == "fresh":
             score -= 0.18
-
     elif classification == "uncertain":
         score = 0.48
         if presence_band == "fresh":
@@ -3017,9 +909,7 @@ def _compute_confidence_score(
         if climate_active:
             score -= 0.03
 
-    # gently blend in current score signal
     score += (max(0, min(100, int(human_activity_score))) / 100.0 - 0.5) * 0.10
-
     return round(_clamp01(score), 2)
 
 
@@ -3076,7 +966,6 @@ def _compute_human_likelihood(
         value -= 0.03
 
     value += (max(0, min(100, int(human_activity_score))) / 100.0 - 0.5) * 0.18
-
     return round(_clamp01(value), 2)
 
 
@@ -3157,6 +1046,74 @@ def _compute_priority_score(
     return round(_clamp01(final), 2)
 
 
+def _get_room_zone(room_name: str) -> str:
+    name = str(room_name or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    if not name:
+        return "outside_misc"
+    if "upstair" in name:
+        return "upstairs"
+    if "downstair" in name:
+        return "downstairs"
+    if name in {"bathroom", "deskroom", "childroom", "masterbedroom", "hallwayroom"}:
+        return "upstairs"
+    if name in {"attickroom", "atticroom"}:
+        return "attic"
+    if name in {"livingroom", "kitchenroom", "diningroom", "entranceroom", "storageroom", "wcroom"}:
+        return "downstairs"
+
+    return "outside_misc"
+
+
+def _human_room_label(name: str) -> str:
+    if not name:
+        return "unknown room"
+
+    normalized = str(name).strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+    explicit = {
+        "attickroom": "attic room",
+        "atticroom": "attic room",
+        "bathroom": "bathroom",
+        "bedroom": "bedroom",
+        "masterbedroom": "master bedroom",
+        "childroom": "child room",
+        "deskroom": "desk room",
+        "livingroom": "living room",
+        "diningroom": "dining room",
+        "entranceroom": "entrance room",
+        "hallwayroom": "hallway",
+        "kitchenroom": "kitchen",
+        "storageroom": "storage room",
+        "powerroom": "power room",
+        "gardenroom": "garden room",
+        "terrasroom": "terrace",
+        "wcroom": "WC",
+        "toiletroom": "toilet",
+        "iotroom": "IoT room",
+        "trapboven": "upstairs stairs",
+        "trapbeneden": "downstairs stairs",
+    }
+
+    if normalized in explicit:
+        return explicit[normalized]
+
+    cleaned = str(name).strip().replace("_", " ").replace("-", " ")
+    if cleaned.lower().endswith("room"):
+        cleaned = cleaned[:-4].strip() + " room"
+    return " ".join(cleaned.split())
+
+
+def _join_natural(items):
+    items = [str(x).strip() for x in items if str(x).strip()]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
 def _build_reason_factors(
     *,
     classification: str,
@@ -3176,44 +1133,33 @@ def _build_reason_factors(
 
     if presence:
         factors.append("stable presence is currently detected")
-
     if motion:
         if motion_band == "fresh":
             factors.append("recent motion supports active use")
         else:
             factors.append("motion is present but not fully fresh")
-
     if lights_on:
         factors.append("lights are currently on")
-
     if access_active:
         factors.append("recent access-related activity is visible")
-
     if climate_active:
         if not presence and not motion:
             factors.append("climate-related activity is present without clear occupancy")
         else:
             factors.append("climate activity is also present")
-
     if not presence and not motion and not lights_on and not access_active and not climate_active:
         factors.append("no strong live activity signals are currently visible")
-
     if not presence and presence_band == "fresh":
         factors.append("recent presence memory is still influencing room state")
-
     if not motion and motion_band in {"fresh", "aging"} and classification in {"transient", "uncertain"}:
         factors.append("recent motion memory is still contributing")
-
     if role in {"transitional", "bathroom"} and classification in {"transient", "passive", "uncertain"}:
         factors.append("this room type usually reflects passing activity rather than sustained use")
-
     if role == "utility" and classification in {"passive", "idle", "uncertain"}:
         factors.append("this room is more likely to reflect system or background activity")
-
     if recency_band == "stale" and classification != "occupied":
         factors.append("the strongest signals are no longer fresh")
 
-    # remove duplicates while preserving order
     deduped = []
     seen = set()
     for item in factors:
@@ -3234,7 +1180,6 @@ def _build_room_reasoning_summary(
 ):
     label = _human_room_label(room_name)
     factors = reason_factors or []
-
     top = factors[:2]
     tail = factors[2:4]
 
@@ -3269,18 +1214,6 @@ def _build_room_reasoning_summary(
 
 
 def _score_room_intelligence(room_name, room_payload, now_ts=None):
-    """
-    Room Reasoning V2
-
-    Keeps the existing score/decay architecture, but adds:
-    - explicit classification
-    - confidence_score (0..1)
-    - human_likelihood (0..1)
-    - automation_likelihood (0..1)
-    - priority_score (0..1)
-    - reason_factors
-    - natural summary
-    """
     payload = room_payload or {}
     profile = _get_room_role_profile(room_name, payload)
     recency = _build_room_recency_snapshot(room_name, payload, now_ts=now_ts)
@@ -3289,63 +1222,44 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
     presence = _safe_bool(payload.get("presence"))
     motion = _safe_bool(payload.get("motion"))
     lights_on = _safe_bool(payload.get("lights_on") or payload.get("light_on") or payload.get("lighting_active"))
-    access_active = _safe_bool(
-        payload.get("door_open")
-        or payload.get("door_active")
-        or payload.get("nfc_active")
-        or payload.get("access_active")
-    )
-    climate_active = _safe_bool(
-        payload.get("climate_active")
-        or payload.get("heating_active")
-        or payload.get("hvac_active")
-        or payload.get("temperature_control_active")
-    )
+    access_active = _safe_bool(payload.get("door_open") or payload.get("door_active") or payload.get("nfc_active") or payload.get("access_active"))
+    climate_active = _safe_bool(payload.get("climate_active") or payload.get("heating_active") or payload.get("hvac_active") or payload.get("temperature_control_active"))
 
-    # existing score logic retained and lightly cleaned
     base_score = 0.0
 
     if presence:
         base_score += 65.0 * profile["presence_weight"]
-    else:
-        if recency["presence_decay_factor"] > 0.60 and recency["presence_age_seconds"] is not None:
-            base_score += 18.0 * profile["presence_weight"] * recency["presence_decay_factor"]
+    elif recency["presence_decay_factor"] > 0.60 and recency["presence_age_seconds"] is not None:
+        base_score += 18.0 * profile["presence_weight"] * recency["presence_decay_factor"]
 
     if motion:
         base_score += 24.0 * profile["motion_weight"]
-    else:
-        if recency["motion_age_seconds"] is not None:
-            base_score += 14.0 * profile["motion_weight"] * recency["motion_decay_factor"]
+    elif recency["motion_age_seconds"] is not None:
+        base_score += 14.0 * profile["motion_weight"] * recency["motion_decay_factor"]
 
     if lights_on:
         base_score += 10.0 * profile["light_weight"]
-    else:
-        if recency["light_age_seconds"] is not None and recency["light_decay_factor"] > 0.55:
-            base_score += 4.0 * profile["light_weight"] * recency["light_decay_factor"]
+    elif recency["light_age_seconds"] is not None and recency["light_decay_factor"] > 0.55:
+        base_score += 4.0 * profile["light_weight"] * recency["light_decay_factor"]
 
     if access_active:
         base_score += 8.0 * profile["access_weight"]
-    else:
-        if recency["access_age_seconds"] is not None and recency["access_decay_factor"] > 0.60:
-            base_score += 3.0 * profile["access_weight"] * recency["access_decay_factor"]
+    elif recency["access_age_seconds"] is not None and recency["access_decay_factor"] > 0.60:
+        base_score += 3.0 * profile["access_weight"] * recency["access_decay_factor"]
 
     if climate_active:
         base_score += 4.0 * profile["climate_weight"]
-    else:
-        if recency["climate_age_seconds"] is not None and recency["climate_decay_factor"] > 0.65:
-            base_score += 2.0 * profile["climate_weight"] * recency["climate_decay_factor"]
+    elif recency["climate_age_seconds"] is not None and recency["climate_decay_factor"] > 0.65:
+        base_score += 2.0 * profile["climate_weight"] * recency["climate_decay_factor"]
 
     base_score += profile["human_bias"]
 
     if access_active and not presence and not motion:
         base_score -= 8.0
-
     if climate_active and not presence and not motion and not lights_on:
         base_score -= 10.0
-
     if lights_on and not presence and not motion and not access_active:
         base_score -= 6.0
-
     if recency["recency_band"] == "stale" and not presence:
         base_score *= 0.75
 
@@ -3359,7 +1273,6 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
         occupancy_confidence = "low"
 
     noise_score = 0
-
     if climate_active:
         noise_score += 28
     elif recency["climate_decay_factor"] > 0.60 and recency["climate_age_seconds"] is not None:
@@ -3478,8 +1391,6 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
         "human_activity_score": human_activity_score,
         "occupancy_confidence": occupancy_confidence,
         "automation_noise_likelihood": automation_noise_likelihood,
-
-        # V2 fields
         "classification": classification,
         "confidence_score": confidence_score,
         "human_likelihood": human_likelihood,
@@ -3488,19 +1399,66 @@ def _score_room_intelligence(room_name, room_payload, now_ts=None):
         "reason_factors": reason_factors,
         "summary": summary,
     }
-
     result.update(reason_info)
     return result
 
 
+def _filter_human_likely_rooms(ranked_rooms):
+    results = []
 
+    for room in ranked_rooms or []:
+        classification = str(room.get("classification", "")).lower()
+        confidence_score = float(room.get("confidence_score", 0.0) or 0.0)
+        human_likelihood = float(room.get("human_likelihood", 0.0) or 0.0)
+        automation_likelihood = float(room.get("automation_likelihood", 0.0) or 0.0)
+        room_role = str(room.get("room_role", "general")).lower()
+
+        include = False
+
+        if classification == "occupied" and confidence_score >= 0.60:
+            include = True
+        elif classification == "transient" and human_likelihood >= 0.58 and confidence_score >= 0.52:
+            include = True
+        elif classification == "uncertain" and human_likelihood >= 0.62 and automation_likelihood <= 0.42:
+            include = True
+
+        if room_role in {"utility"} and classification != "occupied":
+            include = False
+
+        if include:
+            results.append(room)
+
+    return results
+
+
+def _filter_background_like_rooms(ranked_rooms):
+    results = []
+
+    for room in ranked_rooms or []:
+        classification = str(room.get("classification", "")).lower()
+        confidence_score = float(room.get("confidence_score", 0.0) or 0.0)
+        human_likelihood = float(room.get("human_likelihood", 0.0) or 0.0)
+        automation_likelihood = float(room.get("automation_likelihood", 0.0) or 0.0)
+        room_role = str(room.get("room_role", "general")).lower()
+
+        include = False
+
+        if classification == "passive":
+            include = True
+        elif automation_likelihood >= 0.62 and human_likelihood <= 0.42:
+            include = True
+        elif classification == "idle" and room_role == "utility" and confidence_score >= 0.65:
+            include = True
+        elif room_role in {"utility"} and classification in {"uncertain", "passive"}:
+            include = True
+
+        if include:
+            results.append(room)
+
+    return results
 
 
 def _build_ranked_room_intelligence(sensor_payload):
-    """
-    Build ranked list of room intelligence records from enriched /ai/house_sensors payload.
-    V2 ranking prefers explicit room priority first.
-    """
     if not isinstance(sensor_payload, dict):
         return []
 
@@ -3509,7 +1467,6 @@ def _build_ranked_room_intelligence(sensor_payload):
         return []
 
     ranked = []
-
     for room_payload in rooms:
         item = dict(room_payload or {})
         item["room_name"] = item.get("room") or "unknown_room"
@@ -3528,13 +1485,427 @@ def _build_ranked_room_intelligence(sensor_payload):
     return ranked
 
 
+def _enrich_house_sensor_payload_with_activity_reasons(sensor_payload, now_ts=None):
+    if not isinstance(sensor_payload, dict):
+        return sensor_payload
+
+    rooms = sensor_payload.get("rooms")
+    if not isinstance(rooms, list):
+        return sensor_payload
+
+    _ensure_room_activity_db()
+    now_iso = _utc_now_iso()
+    enriched_rooms = []
+
+    for room_payload in rooms:
+        room_data = dict(room_payload or {})
+        room_name = room_data.get("room") or "unknown_room"
+
+        normalized = _extract_room_signal_snapshot(room_name, room_data)
+        _upsert_room_activity_state(room_name, room_data, now_iso=now_iso)
+        reasoning = _score_room_intelligence(room_name, normalized, now_ts=now_ts or now_iso)
+        room_data.update(reasoning)
+        enriched_rooms.append(room_data)
+
+    sensor_payload["rooms"] = enriched_rooms
+    return sensor_payload
+
+
+def _extract_announcement_text(question: str) -> Optional[str]:
+    q = (question or "").strip()
+    if not q:
+        return None
+
+    lower = q.lower()
+
+    prefixes = [
+        "announce ",
+        "say ",
+        "speak ",
+        "tell the house ",
+        "announce in the house ",
+        "say in the house ",
+        "speak in the house ",
+        "announce on the desk speaker ",
+        "say on the desk speaker ",
+        "speak on the desk speaker ",
+        "announce on desk speaker ",
+        "say on desk speaker ",
+        "speak on desk speaker ",
+        "announce on the living speaker ",
+        "say on the living speaker ",
+        "speak on the living speaker ",
+        "announce on the living room speaker ",
+        "say on the living room speaker ",
+        "speak on the living room speaker ",
+        "announce on the toilet speaker ",
+        "say on the toilet speaker ",
+        "speak on the toilet speaker ",
+        "announce on the wc speaker ",
+        "say on the wc speaker ",
+        "speak on the wc speaker ",
+    ]
+
+    for prefix in prefixes:
+        if lower.startswith(prefix):
+            text = q[len(prefix):].strip()
+            if text:
+                return text
+
+    cleanup_suffixes = [
+        " on the desk speaker",
+        " on desk speaker",
+        " on the living speaker",
+        " on the living room speaker",
+        " on the toilet speaker",
+        " on the wc speaker",
+        " in the house",
+        " through the house",
+        " to the house",
+    ]
+
+    cleaned = q
+    cleaned_lower = lower
+    for suffix in cleanup_suffixes:
+        if cleaned_lower.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)].strip()
+            cleaned_lower = cleaned.lower()
+
+    for prefix in ["announce ", "say ", "speak ", "tell the house "]:
+        if cleaned_lower.startswith(prefix):
+            text = cleaned[len(prefix):].strip()
+            if text:
+                return text
+
+    if " announce " in lower:
+        idx = lower.find(" announce ")
+        text = q[idx + len(" announce "):].strip()
+        if text:
+            return text
+
+    return None
+
+
+def _extract_announcement_target(question: str) -> str:
+    q = (question or "").strip().lower()
+
+    if any(x in q for x in [
+        "desk speaker",
+        "deskroom speaker",
+        "desk room speaker",
+        "on desk",
+        "to desk",
+        "in deskroom",
+        "in the desk room",
+        "to the desk room",
+    ]):
+        return "desk"
+
+    if any(x in q for x in [
+        "toilet speaker",
+        "wc speaker",
+        "on toilet",
+        "to toilet",
+        "in the toilet",
+        "to the toilet",
+        "in wc",
+        "to wc",
+    ]):
+        return "toilet"
+
+    if any(x in q for x in [
+        "living speaker",
+        "living room speaker",
+        "livingroom speaker",
+        "on living",
+        "to living",
+        "in the living room",
+        "to the living room",
+    ]):
+        return "living"
+
+    if any(x in q for x in [
+        "party speaker",
+        "party speakers",
+        "party mode",
+    ]):
+        return "party"
+
+    if any(x in q for x in [
+        "in the house",
+        "through the house",
+        "to the house",
+        "whole house",
+        "entire house",
+        "all speakers",
+        "all house speakers",
+    ]):
+        return "living"
+
+    return "living"
+
+
+def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
+    q = (question or "").strip().lower()
+    if not q:
+        return None
+
+    if any(x in q for x in [
+        "is anyone downstairs",
+        "anyone downstairs",
+        "is anyone upstairs",
+        "anyone upstairs",
+        "is anyone in the attic",
+        "anyone in the attic",
+        "which rooms downstairs are occupied",
+        "what rooms downstairs are occupied",
+        "which downstairs rooms are occupied",
+        "what downstairs rooms are occupied",
+        "which rooms upstairs are occupied",
+        "what rooms upstairs are occupied",
+        "which upstairs rooms are occupied",
+        "what upstairs rooms are occupied",
+        "which rooms downstairs are being used",
+        "what rooms downstairs are being used",
+        "which downstairs rooms are being used",
+        "what downstairs rooms are being used",
+        "which rooms upstairs are being used",
+        "what rooms upstairs are being used",
+        "which upstairs rooms are being used",
+        "what upstairs rooms are being used",
+        "attic occupancy",
+        "upstairs occupancy",
+        "downstairs occupancy",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_sensors",
+            "params": {"minutes": 60, "limit": 8000},
+            "reason": "zone_occupancy_query",
+        }
+
+    announcement_text = _extract_announcement_text(question)
+    if announcement_text:
+        announcement_target = _extract_announcement_target(question)
+        return {
+            "type": "route",
+            "target": "/tools/audio/announce",
+            "params": {
+                "text": announcement_text,
+                "target": announcement_target,
+                "level": "info",
+            },
+        }
+
+    if any(x in q for x in [
+        "daily house summary",
+        "house briefing",
+        "daily briefing",
+        "morning house briefing",
+        "morning house summary",
+        "summarize the house",
+        "summarize current house status",
+        "current house status",
+        "house status",
+        "house summary",
+        "give me the house briefing",
+        "give me a house briefing",
+        "give me a house summary",
+        "give me the house summary",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/daily_house_summary",
+            "params": {},
+            "reason": "daily_house_summary_query",
+        }
+
+    if any(x in q for x in [
+        "which rooms are occupied",
+        "what rooms are occupied",
+        "which rooms are active",
+        "what rooms are active",
+        "occupied right now",
+        "room occupancy",
+        "occupancy",
+        "house sensors",
+        "house sensor",
+        "sensor overview",
+        "sensor state",
+        "room activity",
+        "is anyone home",
+        "is anyone in the",
+        "lights on",
+        "which lights are on",
+        "what lights are on",
+        "active lights",
+        "lighting active",
+        "active motion",
+        "where is motion",
+        "which rooms are idle",
+        "what rooms are idle",
+        "idle rooms",
+        "which rooms show activity without presence",
+        "what rooms show activity without presence",
+        "activity without presence",
+        "active without presence",
+        "which rooms currently have presence detected",
+        "what rooms currently have presence detected",
+        "where is presence",
+        "active presence",
+        "which rooms have motion right now",
+        "what rooms have motion right now",
+        "which rooms have lights on right now",
+        "what rooms have lights on right now",
+        "what is happening in the",
+        "what's happening in the",
+        "give me the current state of the",
+        "current state of the",
+        "what sensors are active in the",
+        "what sensors are active in ",
+        "what is active in the",
+        "what is active in ",
+        "why is the",
+        "why is ",
+        "which room is most active",
+        "what room is most active",
+        "which room seems most active",
+        "what room seems most active",
+        "which room seems most active right now",
+        "what room seems most active right now",
+        "most active room",
+        "most important active room",
+        "which rooms are likely being used",
+        "what rooms are likely being used",
+        "likely human active rooms",
+        "likely occupied rooms",
+        "rooms likely in use",
+        "which rooms were recently used by a person",
+        "what rooms were recently used by a person",
+        "recently used by a person",
+        "recent human activity",
+        "which rooms had recent human activity",
+        "what rooms had recent human activity",
+        "which rooms are probably just background automation",
+        "what rooms are probably just background automation",
+        "background automation",
+        "background activity",
+        "automation noise",
+        "which rooms look like automation",
+        "what rooms look like automation",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_sensors",
+            "params": {"minutes": 60, "limit": 8000},
+            "reason": "house_sensor_occupancy_query",
+        }
+
+    history_route = route_history_question(question)
+    if history_route and history_route.get("status") == "ok" and history_route.get("target"):
+        return {
+            "type": "route",
+            "target": history_route["target"],
+            "params": history_route.get("params", {}),
+            "reason": history_route.get("reason", "history_router"),
+        }
+
+    return None
+
+
+def _summarize_history_telemetry(data: dict, action: dict) -> str:
+    items = data.get("items", []) or []
+    room = (action.get("params") or {}).get("room")
+    minutes = (action.get("params") or {}).get("minutes", data.get("minutes", 120))
+    scope = room or "the house"
+
+    climate_items = []
+    for item in items:
+        state_key = str(item.get("state_key") or "").lower()
+        sensor_type = str(item.get("sensor_type") or "").lower()
+        domain = str(item.get("domain") or "").lower()
+
+        if state_key in {"tempactual", "humidityactual"}:
+            climate_items.append(item)
+            continue
+
+        if sensor_type == "climate_controller" and state_key in {"tempactual", "humidityactual"}:
+            climate_items.append(item)
+            continue
+
+        if domain == "climate" and state_key in {"tempactual", "humidityactual"}:
+            climate_items.append(item)
+
+    if not climate_items:
+        return f"I found no recent temperature or humidity telemetry for {scope} in the last {minutes} minutes."
+
+    latest_by_room_and_key = {}
+    for item in climate_items:
+        room_name = item.get("room") or "unknown"
+        state_key = item.get("state_key")
+        key = (room_name, state_key)
+        current_time = item.get("time") or ""
+        old = latest_by_room_and_key.get(key)
+        if old is None or current_time > (old.get("time") or ""):
+            latest_by_room_and_key[key] = item
+
+    grouped = {}
+    for (room_name, _), item in latest_by_room_and_key.items():
+        grouped.setdefault(room_name, {})
+        grouped[room_name][item.get("state_key")] = item.get("value")
+
+    preview = []
+    for room_name in sorted(grouped.keys())[:8]:
+        temp = grouped[room_name].get("tempActual")
+        hum = grouped[room_name].get("humidityActual")
+
+        parts = [room_name]
+        if temp is not None:
+            try:
+                parts.append(f"temp {round(float(temp), 1)} C")
+            except Exception:
+                pass
+        if hum is not None:
+            try:
+                parts.append(f"humidity {round(float(hum), 1)} percent")
+            except Exception:
+                pass
+
+        if len(parts) > 1:
+            preview.append(", ".join(parts))
+
+    if not preview:
+        return f"I found no recent temperature or humidity telemetry for {scope} in the last {minutes} minutes."
+
+    return (
+        f"I found recent house climate telemetry for {len(grouped)} rooms in {scope} "
+        f"over the last {minutes} minutes. {'; '.join(preview)}."
+    )
+
+
+def _build_answer_from_safe_result(action, result, question: str = ""):
+    if result.get("status") != "ok":
+        return "I could not complete that request."
+
+    data = result.get("data", {}) or {}
+    target = action.get("target", "")
+
+    if target == "/ai/house_sensors":
+        return _summarize_house_sensors(data, action, question=question)
+
+    if target == "/ai/loxone_history_telemetry_latest":
+        return _summarize_history_telemetry(data, action)
+
+    if target == "/ai/daily_house_summary":
+        spoken = data.get("spoken_summary")
+        if spoken:
+            return spoken
+        return "I retrieved the daily house summary, but could not render the spoken summary."
+
+    return "I found some data, but I could not summarize it yet."
+
+
 def _summarize_house_sensors(sensor_result, action=None, question=None, user_question=None):
-    """
-    V2 house sensor summary:
-    - uses explicit classification
-    - uses room summaries
-    - better room-specific responses
-    """
     if not isinstance(sensor_result, dict):
         return "I could not read the house sensor data."
 
@@ -3558,27 +1929,224 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
     background_rooms = _filter_background_like_rooms(ranked_rooms)
     most_active_room = ranked_rooms[0] if ranked_rooms else None
 
-
     def _rooms_in_zone(zone_name: str):
         return [
-            room for room in ranked_rooms
+            room
+            for room in ranked_rooms
             if _get_room_zone(room.get("room_name") or room.get("room")) == zone_name
         ]
 
     def _occupied_rooms_in_zone(zone_name: str):
         return [
-            room for room in _rooms_in_zone(zone_name)
+            room
+            for room in _rooms_in_zone(zone_name)
             if str(room.get("classification", "")).lower() == "occupied"
         ]
 
     def _human_rooms_in_zone(zone_name: str):
         return [
-            room for room in human_rooms
+            room
+            for room in human_rooms
             if _get_room_zone(room.get("room_name") or room.get("room")) == zone_name
         ]
 
+    def _room_names(items, limit=6):
+        return [r.get("room_name") or r.get("room") or "unknown room" for r in items[:limit]]
 
+    def _normalize_question_room_guess(text: str) -> str:
+        guess = (text or "").strip().lower()
+        guess = guess.replace("?", "").strip()
 
+        prefixes = [
+            "why is ",
+            "what is happening in ",
+            "what's happening in ",
+            "what is active in ",
+            "what sensors are active in ",
+            "give me the current state of ",
+            "current state of ",
+            "is anyone in ",
+            "is anyone in the ",
+            "is the ",
+        ]
+        for prefix in prefixes:
+            if guess.startswith(prefix):
+                guess = guess[len(prefix):].strip()
+                break
+
+        if guess.startswith("the "):
+            guess = guess[4:].strip()
+
+        suffixes = [
+            " active",
+            " right now",
+            " currently",
+            " occupied",
+            " in use",
+        ]
+        changed = True
+        while changed:
+            changed = False
+            for suffix in suffixes:
+                if guess.endswith(suffix):
+                    guess = guess[: -len(suffix)].strip()
+                    changed = True
+
+        return guess.replace(" ", "")
+
+    if "downstairs" in actual_question:
+        downstairs_occupied = _occupied_rooms_in_zone("downstairs")
+        downstairs_human = _human_rooms_in_zone("downstairs")
+
+        if any(x in actual_question for x in ["is anyone downstairs", "anyone downstairs"]):
+            if downstairs_occupied:
+                return (
+                    "Yes, downstairs currently appears occupied. "
+                    "The most likely occupied downstairs rooms are: "
+                    + ", ".join(_room_names(downstairs_occupied, limit=5))
+                    + "."
+                )
+            if downstairs_human:
+                return (
+                    "Downstairs shows likely human activity in: "
+                    + ", ".join(_room_names(downstairs_human, limit=5))
+                    + "."
+                )
+            return "I do not currently see strong signs of downstairs occupancy."
+
+        if any(
+            x in actual_question
+            for x in [
+                "which rooms downstairs are occupied",
+                "what rooms downstairs are occupied",
+                "which downstairs rooms are occupied",
+                "what downstairs rooms are occupied",
+                "which rooms downstairs are being used",
+                "what rooms downstairs are being used",
+                "which downstairs rooms are being used",
+                "what downstairs rooms are being used",
+            ]
+        ):
+            if downstairs_occupied:
+                return (
+                    "The downstairs rooms that currently look occupied are: "
+                    + ", ".join(_room_names(downstairs_occupied, limit=6))
+                    + "."
+                )
+            if downstairs_human:
+                return (
+                    "The downstairs rooms most likely being used are: "
+                    + ", ".join(_room_names(downstairs_human, limit=6))
+                    + "."
+                )
+            return "I do not currently see occupied downstairs rooms."
+
+    if "upstairs" in actual_question:
+        upstairs_occupied = _occupied_rooms_in_zone("upstairs")
+        upstairs_human = _human_rooms_in_zone("upstairs")
+
+        if any(x in actual_question for x in ["is anyone upstairs", "anyone upstairs"]):
+            if upstairs_occupied:
+                return (
+                    "Yes, upstairs currently appears occupied. "
+                    "The most likely occupied upstairs rooms are: "
+                    + ", ".join(_room_names(upstairs_occupied, limit=5))
+                    + "."
+                )
+            if upstairs_human:
+                return (
+                    "Upstairs shows likely human activity in: "
+                    + ", ".join(_room_names(upstairs_human, limit=5))
+                    + "."
+                )
+            return "I do not currently see strong signs of upstairs occupancy."
+
+        if any(
+            x in actual_question
+            for x in [
+                "which rooms upstairs are occupied",
+                "what rooms upstairs are occupied",
+                "which upstairs rooms are occupied",
+                "what upstairs rooms are occupied",
+                "which rooms upstairs are being used",
+                "what rooms upstairs are being used",
+                "which upstairs rooms are being used",
+                "what upstairs rooms are being used",
+            ]
+        ):
+            if upstairs_occupied:
+                return (
+                    "The upstairs rooms that currently look occupied are: "
+                    + ", ".join(_room_names(upstairs_occupied, limit=6))
+                    + "."
+                )
+            if upstairs_human:
+                return (
+                    "The upstairs rooms most likely being used are: "
+                    + ", ".join(_room_names(upstairs_human, limit=6))
+                    + "."
+                )
+            return "I do not currently see occupied upstairs rooms."
+
+    if "attic" in actual_question:
+        attic_occupied = _occupied_rooms_in_zone("attic")
+        attic_human = _human_rooms_in_zone("attic")
+
+        if any(x in actual_question for x in ["is anyone in the attic", "is anyone attic", "anyone in the attic"]):
+            if attic_occupied:
+                return (
+                    "Yes, the attic currently appears occupied. Active attic rooms: "
+                    + ", ".join(_room_names(attic_occupied, limit=3))
+                    + "."
+                )
+            if attic_human:
+                return (
+                    "The attic shows likely human activity in: "
+                    + ", ".join(_room_names(attic_human, limit=3))
+                    + "."
+                )
+            return "I do not currently see strong signs of attic occupancy."
+
+    normalized_room_guess = None
+
+    if any(
+        actual_question.startswith(prefix)
+        for prefix in [
+            "why is ",
+            "what is happening in ",
+            "what's happening in ",
+            "what is active in ",
+            "what sensors are active in ",
+            "give me the current state of ",
+            "current state of ",
+            "is anyone in ",
+            "is anyone in the ",
+        ]
+    ):
+        normalized_room_guess = _normalize_question_room_guess(actual_question)
+
+    if normalized_room_guess:
+        for room in ranked_rooms:
+            room_name_raw = (room.get("room_name") or room.get("room") or "").strip()
+            room_name_normalized = room_name_raw.lower().replace(" ", "")
+
+            if room_name_normalized == normalized_room_guess:
+                classification = room.get("classification") or "unknown"
+                summary = room.get("summary") or "I could not determine a clear room summary."
+                confidence_score = round(float(room.get("confidence_score", 0.0) or 0.0) * 100)
+                human_likelihood = round(float(room.get("human_likelihood", 0.0) or 0.0) * 100)
+                automation_likelihood = round(float(room.get("automation_likelihood", 0.0) or 0.0) * 100)
+                reason_factors = room.get("reason_factors") or []
+
+                detail_bits = []
+                if reason_factors:
+                    detail_bits.append("Key factors: " + "; ".join(reason_factors[:4]) + ".")
+                detail_bits.append(f"It is classified as {classification} with confidence {confidence_score} percent.")
+                detail_bits.append(
+                    f"Human likelihood is {human_likelihood} percent and automation likelihood is {automation_likelihood} percent."
+                )
+
+                return summary + " " + " ".join(detail_bits)
 
     if any(
         phrase in actual_question
@@ -3654,170 +2222,6 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
             return "The rooms that currently look most like background automation are: " + ", ".join(lines) + "."
         return "I do not currently see rooms that strongly look like background automation."
 
-    def _normalize_question_room_guess(text: str) -> str:
-        guess = (text or "").strip().lower()
-        guess = guess.replace("?", "").strip()
-
-        prefixes = [
-            "why is ",
-            "what is happening in ",
-            "what's happening in ",
-            "what is active in ",
-            "what sensors are active in ",
-            "give me the current state of ",
-            "current state of ",
-            "is anyone in ",
-            "is anyone in the ",
-            "is the ",
-        ]
-        for prefix in prefixes:
-            if guess.startswith(prefix):
-                guess = guess[len(prefix):].strip()
-                break
-
-        if guess.startswith("the "):
-            guess = guess[4:].strip()
-
-        suffixes = [
-            " active",
-            " right now",
-            " currently",
-            " occupied",
-            " in use",
-        ]
-        changed = True
-        while changed:
-            changed = False
-            for suffix in suffixes:
-                if guess.endswith(suffix):
-                    guess = guess[: -len(suffix)].strip()
-                    changed = True
-
-        return guess.replace(" ", "")
-
-    normalized_room_guess = None
-
-    if any(
-        actual_question.startswith(prefix)
-        for prefix in [
-            "why is ",
-            "what is happening in ",
-            "what's happening in ",
-            "what is active in ",
-            "what sensors are active in ",
-            "give me the current state of ",
-            "current state of ",
-            "is anyone in ",
-            "is anyone in the ",
-        ]
-    ):
-        normalized_room_guess = _normalize_question_room_guess(actual_question)
-
-    if normalized_room_guess:
-        for room in ranked_rooms:
-            room_name_raw = (room.get("room_name") or room.get("room") or "").strip()
-            room_name_normalized = room_name_raw.lower().replace(" ", "")
-
-            if room_name_normalized == normalized_room_guess:
-                classification = room.get("classification") or "unknown"
-                summary = room.get("summary") or "I could not determine a clear room summary."
-                confidence_score = round(float(room.get("confidence_score", 0.0) or 0.0) * 100)
-                human_likelihood = round(float(room.get("human_likelihood", 0.0) or 0.0) * 100)
-                automation_likelihood = round(float(room.get("automation_likelihood", 0.0) or 0.0) * 100)
-                reason_factors = room.get("reason_factors") or []
-
-                detail_bits = []
-                if reason_factors:
-                    detail_bits.append("Key factors: " + "; ".join(reason_factors[:4]) + ".")
-                detail_bits.append(
-                    f"It is classified as {classification} with confidence {confidence_score} percent."
-                )
-                detail_bits.append(
-                    f"Human likelihood is {human_likelihood} percent and automation likelihood is {automation_likelihood} percent."
-                )
-
-                return summary + " " + " ".join(detail_bits)
-
-
-
-
-    if "downstairs" in actual_question:
-        downstairs_occupied = _occupied_rooms_in_zone("downstairs")
-        downstairs_human = _human_rooms_in_zone("downstairs")
-
-        if any(x in actual_question for x in ["is anyone downstairs", "anyone downstairs"]):
-            if downstairs_occupied:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_occupied[:5]]
-                return "Yes, downstairs currently appears occupied. The most likely occupied downstairs rooms are: " + ", ".join(names) + "."
-            if downstairs_human:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_human[:5]]
-                return "Downstairs shows likely human activity in: " + ", ".join(names) + "."
-            return "I do not currently see strong signs of downstairs occupancy."
-
-        if any(x in actual_question for x in [
-            "which rooms downstairs are occupied",
-            "what rooms downstairs are occupied",
-            "which downstairs rooms are occupied",
-            "what downstairs rooms are occupied",
-            "which rooms downstairs are being used",
-            "what rooms downstairs are being used",
-        ]):
-            if downstairs_occupied:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_occupied[:6]]
-                return "The downstairs rooms that currently look occupied are: " + ", ".join(names) + "."
-            if downstairs_human:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in downstairs_human[:6]]
-                return "The downstairs rooms most likely being used are: " + ", ".join(names) + "."
-            return "I do not currently see occupied downstairs rooms."
-
-    if "upstairs" in actual_question:
-        upstairs_occupied = _occupied_rooms_in_zone("upstairs")
-        upstairs_human = _human_rooms_in_zone("upstairs")
-
-        if any(x in actual_question for x in ["is anyone upstairs", "anyone upstairs"]):
-            if upstairs_occupied:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_occupied[:5]]
-                return "Yes, upstairs currently appears occupied. The most likely occupied upstairs rooms are: " + ", ".join(names) + "."
-            if upstairs_human:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_human[:5]]
-                return "Upstairs shows likely human activity in: " + ", ".join(names) + "."
-            return "I do not currently see strong signs of upstairs occupancy."
-
-        if any(x in actual_question for x in [
-            "which rooms upstairs are occupied",
-            "what rooms upstairs are occupied",
-            "which upstairs rooms are occupied",
-            "what upstairs rooms are occupied",
-            "which rooms upstairs are being used",
-            "what rooms upstairs are being used",
-        ]):
-            if upstairs_occupied:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_occupied[:6]]
-                return "The upstairs rooms that currently look occupied are: " + ", ".join(names) + "."
-            if upstairs_human:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in upstairs_human[:6]]
-                return "The upstairs rooms most likely being used are: " + ", ".join(names) + "."
-            return "I do not currently see occupied upstairs rooms."
-
-    if "attic" in actual_question:
-        attic_occupied = _occupied_rooms_in_zone("attic")
-        attic_human = _human_rooms_in_zone("attic")
-
-        if any(x in actual_question for x in ["is anyone in the attic", "is anyone attic", "anyone in the attic"]):
-            if attic_occupied:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in attic_occupied[:3]]
-                return "Yes, the attic currently appears occupied. Active attic rooms: " + ", ".join(names) + "."
-            if attic_human:
-                names = [r.get("room_name") or r.get("room") or "unknown room" for r in attic_human[:3]]
-                return "The attic shows likely human activity in: " + ", ".join(names) + "."
-            return "I do not currently see strong signs of attic occupancy."
-
-
-
-
-
-
-
     if any(
         phrase in actual_question
         for phrase in [
@@ -3825,13 +2229,11 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
             "what rooms are occupied",
             "occupancy",
             "is anyone home",
-            "is anyone downstairs",
         ]
     ):
         occupied_rooms = [r for r in ranked_rooms if str(r.get("classification", "")).lower() == "occupied"]
         if occupied_rooms:
-            names = [r.get("room_name") or r.get("room") or "unknown room" for r in occupied_rooms[:6]]
-            return "The rooms that currently look occupied are: " + ", ".join(names) + "."
+            return "The rooms that currently look occupied are: " + ", ".join(_room_names(occupied_rooms, limit=6)) + "."
         return "I do not currently see any rooms that confidently look occupied."
 
     human_names = [room.get("room_name") or room.get("room") or "unknown room" for room in human_rooms[:5]]
@@ -3857,133 +2259,93 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
     return " ".join(summary_parts)
 
 
+def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
+    action = _match_safe_action(question)
+    if action:
+        auth_result = classify_action_auth(action)
 
+        if auth_result.get("allowed") is True:
+            exec_result = execute_safe_action(action)
 
+            if (
+                action.get("target") == "/ai/house_sensors"
+                and isinstance(exec_result, dict)
+                and exec_result.get("status") == "ok"
+            ):
+                payload = exec_result.get("data")
+                if isinstance(payload, dict):
+                    exec_result["data"] = _enrich_house_sensor_payload_with_activity_reasons(payload)
 
+            answer = _build_answer_from_safe_result(action, exec_result, question=question)
+            return {
+                "status": "ok" if exec_result.get("status") == "ok" else exec_result.get("status", "error"),
+                "mode": "safe_executor",
+                "intents": ["safe_executor"],
+                "used_tools": [],
+                "tool_data": {
+                    "safe_executor": {
+                        "action": action,
+                        "result": exec_result,
+                    },
+                    "auth_policy": auth_result,
+                },
+                "answer": answer,
+                "auth_result": auth_result,
+                "executor_action": action,
+                "executor_result": exec_result,
+            }
 
-def _filter_human_likely_rooms(ranked_rooms):
-    """
-    Keep rooms that most likely represent real human use.
-    Designed to be stricter for hallway/bathroom/utility rooms.
-    """
-    results = []
+        if auth_result.get("auth_level") == "approval_required":
+            approval = get_pending_approval_service().create_request(
+                action=action,
+                auth_level=auth_result.get("auth_level"),
+                approval_method=auth_result.get("approval_method"),
+                question=question,
+                room_id=(action.get("params") or {}).get("room"),
+                requested_by="agent_query",
+                expires_in_seconds=90,
+            )
+            return {
+                "status": "ok",
+                "mode": "approval_required",
+                "intents": ["approval_required"],
+                "used_tools": [],
+                "tool_data": {
+                    "auth_policy": auth_result,
+                    "approval": approval,
+                },
+                "answer": (
+                    f"This action requires approval before execution. "
+                    f"Approval token: {approval.get('token')}."
+                ),
+                "auth_result": auth_result,
+                "approval": approval,
+                "executor_action": action,
+            }
 
-    for room in ranked_rooms or []:
-        score = int(room.get("human_activity_score", 0))
-        occupancy_confidence = str(room.get("occupancy_confidence", "low")).lower()
-        noise = str(room.get("automation_noise_likelihood", "high")).lower()
-        primary = str(room.get("activity_reason_primary", "")).lower()
-        room_role = str(room.get("room_role", "general")).lower()
-        recency_band = str(room.get("recency_band", "unknown")).lower()
+        return {
+            "status": "blocked",
+            "mode": "policy_blocked",
+            "intents": ["policy_blocked"],
+            "used_tools": [],
+            "tool_data": {
+                "auth_policy": auth_result,
+            },
+            "answer": auth_result.get("reason", "This action is blocked by policy."),
+            "auth_result": auth_result,
+            "executor_action": action,
+        }
 
-        include = False
+    fallback = handle_agent_question(question)
+    if isinstance(fallback, dict):
+        fallback.setdefault("mode", "fallback_agent")
+        return fallback
 
-        if occupancy_confidence == "high" and primary == "presence_detected":
-            include = True
-        elif score >= 55 and noise != "high" and primary in {
-            "presence_detected",
-            "recent_motion",
-            "recent_presence_memory",
-        }:
-            include = True
-        elif score >= 45 and noise == "low" and recency_band in {"fresh", "aging"} and room_role not in {"utility"}:
-            include = True
-
-        if room_role in {"transitional", "bathroom"} and primary not in {"presence_detected"}:
-            if score < 65:
-                include = False
-
-        if include:
-            results.append(room)
-
-    return results
-
-
-def _filter_background_like_rooms(ranked_rooms):
-    """
-    Keep rooms that are probably active mostly because of automation,
-    stale signals, or weak evidence of real human use.
-    """
-    results = []
-
-    for room in ranked_rooms or []:
-        score = int(room.get("human_activity_score", 0))
-        occupancy_confidence = str(room.get("occupancy_confidence", "low")).lower()
-        noise = str(room.get("automation_noise_likelihood", "low")).lower()
-        primary = str(room.get("activity_reason_primary", "")).lower()
-        room_role = str(room.get("room_role", "general")).lower()
-        recency_band = str(room.get("recency_band", "unknown")).lower()
-
-        background_like = False
-
-        if noise == "high":
-            background_like = True
-        elif primary in {"background_automation", "lights_only", "access_triggered", "stale_motion"}:
-            background_like = True
-        elif occupancy_confidence == "low" and score < 35:
-            background_like = True
-        elif room_role in {"utility"} and primary != "presence_detected":
-            background_like = True
-        elif room_role in {"transitional", "bathroom"} and recency_band == "stale" and primary != "presence_detected":
-            background_like = True
-
-        if background_like:
-            results.append(room)
-
-    return results
-
-
-
-
-
-
-
-
-def _enrich_house_sensor_payload_with_activity_reasons(sensor_payload, now_ts=None):
-    """
-    Enrich full /ai/house_sensors payload with:
-    - SQLite-backed room activity memory updates
-    - room reasoning
-    - human score
-    - recency metadata
-
-    Supports the real live payload shape where:
-    sensor_payload["rooms"] is a LIST of room dicts.
-    """
-    if not isinstance(sensor_payload, dict):
-        return sensor_payload
-
-    rooms = sensor_payload.get("rooms")
-    if not isinstance(rooms, list):
-        return sensor_payload
-
-    _ensure_room_activity_db()
-
-    now_iso = _utc_now_iso()
-    enriched_rooms = []
-
-    for room_payload in rooms:
-        room_data = dict(room_payload or {})
-        room_name = room_data.get("room") or "unknown_room"
-
-        # Normalize nested live room payload into flat signal snapshot
-        normalized = _extract_room_signal_snapshot(room_name, room_data)
-
-        # Persist latest live state into SQLite memory
-        _upsert_room_activity_state(room_name, room_data, now_iso=now_iso)
-
-        # Compute reasoning from normalized live data + persisted memory
-        reasoning = _score_room_intelligence(room_name, normalized, now_ts=now_ts or now_iso)
-
-        # Merge reasoning back into the original room payload
-        room_data.update(reasoning)
-
-        enriched_rooms.append(room_data)
-
-    sensor_payload["rooms"] = enriched_rooms
-    return sensor_payload
-
-
-
-
-
+    return {
+        "status": "ok",
+        "mode": "fallback_agent",
+        "intents": [],
+        "used_tools": [],
+        "tool_data": {},
+        "answer": str(fallback),
+    }

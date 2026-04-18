@@ -60,6 +60,7 @@
     "/voice/player_status/<player_key>",
     "/voice/players",
     "/voice/status",
-    "/ai/house_sensors"
+    "/ai/house_sensors",
+    "/ai/daily_house_summary"
   ]
 }

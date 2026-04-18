@@ -830,62 +830,11 @@ def build_house_direct_response(question, intents, tool_data):
             tool_data["daily_energy_story_unified_flow"] = {"error": str(e)}
 
     if "house_overview" in intents and "house_overview" in tool_data:
-        try:
-            overview = tool_data["house_overview"]
-            flow = energy_service.get_power_flow_summary()
+        tool_data["house_overview_unified_flow"] = {
+            "status": "disabled",
+            "reason": "stale_house_overview_route_disabled_pending_unified_summary"
+        }
 
-            freq = overview["energy_summary"].get("frequency_hz")
-            pf = overview["energy_summary"].get("power_factor")
-
-            phases = overview["phases"]
-            currents = {
-                "L1": phases["L1"]["current_a"],
-                "L2": phases["L2"]["current_a"],
-                "L3": phases["L3"]["current_a"],
-            }
-            max_phase = max(currents, key=currents.get)
-            max_current = currents[max_phase]
-
-            grid_in = flow.get("grid_import_kw")
-            grid_out = flow.get("grid_export_kw")
-            load = flow.get("estimated_house_load_kw")
-            solar = flow.get("solar_power_kw")
-            excess = flow.get("excess_energy_available_kw")
-            excess_state = flow.get("excess_energy_state")
-
-            if grid_out is not None and grid_out > 0:
-                grid_text = f"The house is exporting {_fmt_energy(grid_out, ' kW')} to the grid."
-            elif grid_in is not None and grid_in > 0:
-                grid_text = f"The house is importing {_fmt_energy(grid_in, ' kW')} from the grid."
-            else:
-                grid_text = "The house is currently near grid balance."
-
-            excess_text = ""
-            if excess is not None and excess > 0:
-                excess_text = (
-                    f" Automation-safe excess energy available is {_fmt_energy(excess, ' kW')} "
-                    f"with state {excess_state}."
-                )
-
-            tool_data["house_overview_unified_flow"] = flow
-
-            return {
-                "status": "ok",
-                "mode": "direct_tool",
-                "intents": intents,
-                "used_tools": ["house_overview"],
-                "tool_data": tool_data,
-                "answer": (
-                    f"The estimated house load is {_fmt_energy(load, ' kW')}. "
-                    f"Solar production is {_fmt_energy(solar, ' kW')}. "
-                    f"{grid_text}"
-                    f"{excess_text} "
-                    f"Grid frequency is {freq:.3f} Hz and total power factor is {pf:.3f}. "
-                    f"The most loaded phase right now is {max_phase} at {max_current:.3f} A."
-                ),
-            }
-        except Exception as e:
-            tool_data["house_overview_unified_flow"] = {"error": str(e)}
 
     if "power_peak_today" in intents and "power_peak_today" in tool_data:
         peak = tool_data["power_peak_today"]

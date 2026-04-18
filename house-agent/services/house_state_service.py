@@ -382,3 +382,142 @@ def get_house_state() -> Dict[str, Any]:
             "rooms_unknown_count": len(rooms_unknown),
         },
     }
+
+def get_daily_house_summary() -> Dict[str, Any]:
+    house_state = get_house_state()
+    if not isinstance(house_state, dict):
+        return {
+            "status": "error",
+            "message": "House state is unavailable",
+        }
+
+    summary = house_state.get("summary") or {}
+    climate = house_state.get("climate_summary") or {}
+    energy_summary = house_state.get("energy_summary") or {}
+    energy_flow = house_state.get("energy_flow") or {}
+    telemetry = house_state.get("telemetry") or {}
+    audio = house_state.get("audio") or {}
+    crypto = house_state.get("crypto") or {}
+    voice_nodes = house_state.get("voice_nodes") or {}
+
+    occupied_rooms = summary.get("occupied_rooms") or []
+    lighting_active_rooms = summary.get("lighting_active_rooms") or []
+    offline_nodes = summary.get("offline_nodes") or []
+    service_warning_hosts = summary.get("service_warning_hosts") or []
+    monitoring_unavailable_nodes = summary.get("monitoring_unavailable_nodes") or []
+
+    interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
+    interpreted_solar_power_kw = summary.get("interpreted_solar_power_kw")
+    interpreted_grid_import_kw = summary.get("interpreted_grid_import_kw")
+    interpreted_grid_export_kw = summary.get("interpreted_grid_export_kw")
+    energy_mode = summary.get("energy_mode") or "unknown"
+    quiet_now = summary.get("quiet_now")
+
+    room_count = climate.get("room_count") or 0
+    min_temp_c = climate.get("min_temp_c")
+    max_temp_c = climate.get("max_temp_c")
+    min_humidity_percent = climate.get("min_humidity_percent")
+    max_humidity_percent = climate.get("max_humidity_percent")
+
+    voice_online = None
+    if isinstance(voice_nodes, dict):
+        voice_online = ((voice_nodes.get("summary") or {}).get("online"))
+
+    crypto_total_value = None
+    if isinstance(crypto, dict):
+        crypto_total_value = crypto.get("total_value")
+
+    spoken_parts = []
+
+    if interpreted_house_load_kw is not None:
+        spoken_parts.append(f"Estimated house load is {interpreted_house_load_kw:.2f} kilowatts")
+
+    if interpreted_solar_power_kw is not None and interpreted_solar_power_kw > 0:
+        spoken_parts.append(f"solar production is {interpreted_solar_power_kw:.2f} kilowatts")
+
+    if interpreted_grid_export_kw is not None and interpreted_grid_export_kw > 0.05:
+        spoken_parts.append(f"the house is exporting {interpreted_grid_export_kw:.2f} kilowatts")
+    elif interpreted_grid_import_kw is not None and interpreted_grid_import_kw > 0.05:
+        spoken_parts.append(f"the house is importing {interpreted_grid_import_kw:.2f} kilowatts from the grid")
+
+    if occupied_rooms:
+        spoken_parts.append(
+            "Likely occupied rooms are " + ", ".join(occupied_rooms[:6])
+        )
+    else:
+        spoken_parts.append("No rooms currently show strong occupancy")
+
+    if room_count:
+        climate_bits = []
+        if min_temp_c is not None and max_temp_c is not None:
+            climate_bits.append(f"temperature ranges from {min_temp_c:.1f} to {max_temp_c:.1f} C")
+        if min_humidity_percent is not None and max_humidity_percent is not None:
+            climate_bits.append(f"humidity ranges from {min_humidity_percent:.1f} to {max_humidity_percent:.1f} percent")
+        if climate_bits:
+            spoken_parts.append("House climate: " + "; ".join(climate_bits))
+
+    if offline_nodes:
+        spoken_parts.append("Offline nodes: " + ", ".join(offline_nodes[:5]))
+
+    if service_warning_hosts:
+        spoken_parts.append("Service warnings on: " + ", ".join(service_warning_hosts[:5]))
+
+    if monitoring_unavailable_nodes:
+        spoken_parts.append("Monitoring unavailable for: " + ", ".join(monitoring_unavailable_nodes[:5]))
+
+    if quiet_now is True:
+        spoken_parts.append("The house is currently quiet")
+    elif quiet_now is False:
+        spoken_parts.append("Audio playback is currently active")
+
+    spoken_summary = ". ".join(spoken_parts).strip()
+    if spoken_summary and not spoken_summary.endswith("."):
+        spoken_summary += "."
+
+    return {
+        "status": "ok",
+        "generated_at": energy_summary.get("timestamp") or telemetry.get("timestamp"),
+        "energy": {
+            "mode": energy_mode,
+            "estimated_house_load_kw": interpreted_house_load_kw,
+            "solar_power_kw": interpreted_solar_power_kw,
+            "grid_import_kw": interpreted_grid_import_kw,
+            "grid_export_kw": interpreted_grid_export_kw,
+            "excess_energy_available_kw": summary.get("excess_energy_available_kw"),
+            "excess_energy_state": summary.get("excess_energy_state"),
+            "provider_net_power_kw": energy_summary.get("provider_net_power_kw"),
+            "current_average_demand_kw": energy_summary.get("current_average_demand_kw"),
+        },
+        "climate": {
+            "room_count": room_count,
+            "min_temp_c": min_temp_c,
+            "max_temp_c": max_temp_c,
+            "min_humidity_percent": min_humidity_percent,
+            "max_humidity_percent": max_humidity_percent,
+        },
+        "activity": {
+            "occupied_rooms": occupied_rooms,
+            "occupied_room_count": len(occupied_rooms),
+            "lighting_active_rooms": lighting_active_rooms,
+            "lighting_active_room_count": len(lighting_active_rooms),
+            "quiet_now": quiet_now,
+            "active_audio_rooms": summary.get("active_audio_rooms") or [],
+        },
+        "infrastructure": {
+            "offline_nodes": offline_nodes,
+            "warning_nodes_count": summary.get("warning_nodes_count"),
+            "service_warning_hosts": service_warning_hosts,
+            "monitoring_unavailable_nodes": monitoring_unavailable_nodes,
+            "voice_nodes_online": voice_online,
+        },
+        "telemetry": {
+            "rooms_seen": telemetry.get("rooms_seen") or [],
+            "room_count": len(telemetry.get("rooms_seen") or []),
+            "count": telemetry.get("count"),
+            "minutes": telemetry.get("minutes"),
+        },
+        "crypto": {
+            "total_value": crypto_total_value,
+        },
+        "spoken_summary": spoken_summary,
+    }

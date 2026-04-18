@@ -18,7 +18,7 @@ from routes.loxone_routes import (
 
 from services.netdata_service import get_all_nodes_overview, get_alarms, get_node_summary
 from services.service_health_service import get_local_service_health, get_service_health_for_node, get_services_overview
-from services.house_state_service import get_house_state
+from services.house_state_service import get_house_state, get_daily_house_summary
 from services.unified_playback_state_service import get_unified_playback_state
 
 from services.energy_service import energy_service
@@ -221,6 +221,9 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
 
     if path == "/ai/house_state":
         return get_house_state()
+
+    if path == "/ai/daily_house_summary":
+        return get_daily_house_summary()
 
 
     raise ValueError(f"No internal executor mapped for route: {path}")
