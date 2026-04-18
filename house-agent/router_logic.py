@@ -52,9 +52,44 @@ from router_tools import (
 
 
 
+
+
+def should_defer_to_house_bridge(question: str) -> bool:
+    q = str(question or "").strip().lower()
+    if not q:
+        return False
+
+    patterns = [
+        "which nodes are offline",
+        "what nodes are offline",
+        "are any services unhealthy",
+        "which services are unhealthy",
+        "is solar covering the house load",
+        "is solar covering the load",
+        "are we importing from the grid right now",
+        "importing from the grid right now",
+        "how much power is the house using right now",
+        "how much power are we using right now",
+        "current house load",
+        "house power usage",
+        "is anyone home",
+        "which rooms are active",
+        "which rooms are occupied",
+        "is the house quiet",
+        "is anything unusual right now",
+        "what is happening in the house",
+    ]
+    return any(p in q for p in patterns)
+
+
+
 def detect_intents(question: str) -> list[str]:
     q = question.lower()
     intents = []
+
+    if should_defer_to_house_bridge(question):
+        return []
+
 
     # Snapshot
     if any(x in q for x in [
@@ -107,7 +142,7 @@ def detect_intents(question: str) -> list[str]:
     ]):
         intents.append("house_overview")
 
-    if any(x in q for x in [
+    if False and any(x in q for x in [
         "anomaly", "anything unusual", "anything wrong",
         "electrical issue", "power issue", "house issue",
         "is something wrong", "any problem right now",
@@ -255,7 +290,7 @@ def gather_house_data(question: str) -> dict:
     if "energy_summary" in intents:
         data["energy_summary"] = get_energy_summary()
 
-    if "anomaly_summary" in intents:
+    if False and "anomaly_summary" in intents:
         data["anomaly_summary"] = get_anomaly_summary()
 
     if "energy_today" in intents:

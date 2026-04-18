@@ -1828,6 +1828,8 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "give me a house summary",
         "give me the house summary",
     ]):
+
+
         return {
             "type": "route",
             "target": "/ai/daily_house_summary",
@@ -1836,6 +1838,10 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         }
 
     if any(x in q for x in [
+        "is the house occupied",
+        "house occupied",
+        "is anyone home",
+        "anyone home",
         "which rooms are occupied",
         "what rooms are occupied",
         "which rooms are active",
@@ -1843,12 +1849,47 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "occupied right now",
         "room occupancy",
         "occupancy",
+        "is the house quiet",
+        "house quiet",
+        "is it quiet in the house",
+        "what is happening in the house",
+        "what's happening in the house",
+        "what is happening around the house",
+        "what's happening around the house",
+        "what is the house doing",
+        "what's the house doing",
+        "current house state",
+        "current state of the house",
+        "house state now",
+        "house status now",
+        "which nodes are offline",
+        "what nodes are offline",
+        "are any services unhealthy",
+        "which services are unhealthy",
+        "is solar covering the house load",
+        "is solar covering the load",
+        "are we importing from the grid right now",
+        "importing from the grid right now",
+        "how much power is the house using right now",
+        "how much power are we using right now",
+        "current house load",
+        "house power usage",
+
+
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_state",
+            "params": {},
+            "reason": "interpreted_house_state_query",
+        }
+
+    if any(x in q for x in [
         "house sensors",
         "house sensor",
         "sensor overview",
         "sensor state",
         "room activity",
-        "is anyone home",
         "is anyone in the",
         "lights on",
         "which lights are on",
@@ -1913,8 +1954,27 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
             "type": "route",
             "target": "/ai/house_sensors",
             "params": {"minutes": 60, "limit": 8000},
-            "reason": "house_sensor_occupancy_query",
+            "reason": "house_sensor_detail_query",
         }
+
+
+    if any(x in q for x in [
+        "anything unusual",
+        "unusual right now",
+        "is anything unusual right now",
+        "is something wrong",
+        "any problem right now",
+        "anything wrong in the house",
+        "what is unusual in the house",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/house_state",
+            "params": {},
+            "reason": "interpreted_house_state_unusual_query",
+        }
+
+
 
     history_route = route_history_question(question)
     if history_route and history_route.get("status") == "ok" and history_route.get("target"):
@@ -2063,6 +2123,255 @@ def _summarize_waste_schedule(data: dict, action: dict, question: str = "") -> s
     return "I could not find any upcoming waste pickup events."
 
 
+def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
+    if not isinstance(data, dict):
+        return "I could not read the interpreted house state."
+
+    payload = data
+    if isinstance(data.get("data"), dict):
+        payload = data.get("data") or {}
+
+    if not isinstance(payload, dict):
+        return "I could not read the interpreted house state payload."
+
+    q = (question or "").strip().lower()
+
+    try:
+        summary = payload.get("summary") or {}
+        climate_summary = payload.get("climate_summary") or {}
+        energy_flow = payload.get("energy_flow") or {}
+        power = payload.get("power") or {}
+        services = payload.get("services") or {}
+        nodes_health = payload.get("nodes_health") or {}
+        voice_nodes = payload.get("voice_nodes") or {}
+
+        occupied_rooms = summary.get("occupied_rooms") or []
+        quiet_now = summary.get("quiet_now")
+        offline_nodes = summary.get("offline_nodes") or []
+        service_warning_hosts = summary.get("service_warning_hosts") or []
+        monitoring_unavailable_nodes = summary.get("monitoring_unavailable_nodes") or []
+
+        interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
+        interpreted_solar_power_kw = summary.get("interpreted_solar_power_kw")
+        interpreted_grid_import_kw = summary.get("interpreted_grid_import_kw")
+        interpreted_grid_export_kw = summary.get("interpreted_grid_export_kw")
+        solar_covering_load = summary.get("solar_covering_load")
+        importing_from_grid = summary.get("importing_from_grid")
+        current_power_watts = summary.get("current_power_watts")
+
+        def _fmt_kw(v):
+            try:
+                if v is None:
+                    return None
+                return f"{float(v):.2f}"
+            except Exception:
+                return None
+
+        def _fmt_w(v):
+            try:
+                if v is None:
+                    return None
+                return f"{round(float(v))}"
+            except Exception:
+                return None
+
+        if any(x in q for x in [
+            "is the house quiet",
+            "house quiet",
+            "is it quiet in the house",
+            "quiet right now",
+        ]):
+            if quiet_now is True:
+                return "Yes, the house is currently quiet."
+            if quiet_now is False:
+                return "No, the house is not fully quiet right now."
+            return "I could not determine whether the house is quiet right now."
+
+        if any(x in q for x in [
+            "which rooms are occupied",
+            "what rooms are occupied",
+            "occupied right now",
+            "occupancy",
+        ]):
+            if occupied_rooms:
+                return f"Occupied rooms right now are {_join_natural(occupied_rooms[:6])}."
+            return "I do not currently see any occupied rooms."
+
+        if any(x in q for x in [
+            "which rooms are active",
+            "what rooms are active",
+        ]):
+            if occupied_rooms:
+                return f"The rooms currently showing the clearest activity are {_join_natural(occupied_rooms[:6])}."
+            return "I do not currently see strongly active rooms right now."
+
+        if any(x in q for x in [
+            "is the house occupied",
+            "house occupied",
+            "is anyone home",
+            "anyone home",
+        ]):
+            if occupied_rooms:
+                return f"Yes, the house appears occupied. Presence is currently detected in {_join_natural(occupied_rooms[:6])}."
+            if quiet_now is True:
+                return "I do not currently see strong signs of occupancy, and the house appears quiet."
+            return "I do not currently see strong signs of occupancy."
+
+        if any(x in q for x in [
+            "anything unusual",
+            "unusual right now",
+            "is anything unusual right now",
+        ]):
+            parts = []
+            if offline_nodes:
+                parts.append(f"offline nodes include {_join_natural(offline_nodes[:4])}")
+            if service_warning_hosts:
+                parts.append(f"service warnings are present on {_join_natural(service_warning_hosts[:4])}")
+            if monitoring_unavailable_nodes:
+                parts.append(f"monitoring is unavailable for {_join_natural(monitoring_unavailable_nodes[:4])}")
+            if parts:
+                return "The main unusual items right now are that " + " and ".join(parts) + "."
+            return "Nothing clearly unusual is flagged right now."
+
+        if any(x in q for x in [
+            "which nodes are offline",
+            "what nodes are offline",
+            "offline nodes",
+            "is anything offline",
+            "what is offline",
+        ]):
+            if offline_nodes:
+                return f"Offline nodes right now are {_join_natural(offline_nodes[:6])}."
+            return "I do not currently see offline nodes."
+
+        if any(x in q for x in [
+            "are any services unhealthy",
+            "which services are unhealthy",
+            "service warnings",
+            "service issues",
+            "unhealthy services",
+            "are there any service issues",
+        ]):
+            if service_warning_hosts:
+                return f"Service warnings are currently present on {_join_natural(service_warning_hosts[:6])}."
+            return "I do not currently see service warning hosts."
+
+        if any(x in q for x in [
+            "is solar covering the load",
+            "is solar covering the house load",
+            "is solar enough for the house",
+            "is solar enough right now",
+        ]):
+            if solar_covering_load is True:
+                solar_kw = _fmt_kw(interpreted_solar_power_kw)
+                load_kw = _fmt_kw(interpreted_house_load_kw)
+                if solar_kw and load_kw:
+                    return f"Yes, solar is currently covering the house load. Solar is producing {solar_kw} kilowatts and estimated house load is {load_kw} kilowatts."
+                return "Yes, solar is currently covering the house load."
+            if solar_covering_load is False:
+                solar_kw = _fmt_kw(interpreted_solar_power_kw)
+                load_kw = _fmt_kw(interpreted_house_load_kw)
+                if solar_kw and load_kw:
+                    return f"No, solar is not fully covering the house load right now. Solar is {solar_kw} kilowatts and estimated house load is {load_kw} kilowatts."
+                return "No, solar is not fully covering the house load right now."
+            return "I could not determine whether solar is covering the house load right now."
+
+        if any(x in q for x in [
+            "are we importing from the grid",
+            "are we using grid power",
+            "are we pulling from the grid",
+            "grid import right now",
+            "importing from grid right now",
+        ]):
+            if importing_from_grid is True:
+                grid_kw = _fmt_kw(interpreted_grid_import_kw)
+                solar_kw = _fmt_kw(interpreted_solar_power_kw)
+                load_kw = _fmt_kw(interpreted_house_load_kw)
+                if grid_kw and solar_kw and load_kw:
+                    return f"Yes, the house is currently importing {grid_kw} kilowatts from the grid. Solar production is {solar_kw} kilowatts and house load is {load_kw} kilowatts."
+                if grid_kw:
+                    return f"Yes, the house is currently importing {grid_kw} kilowatts from the grid."
+                return "Yes, the house is currently importing power from the grid."
+            if importing_from_grid is False:
+                export_kw = _fmt_kw(interpreted_grid_export_kw)
+                if export_kw and float(export_kw) > 0:
+                    return f"No, the house is not importing from the grid. It is exporting about {export_kw} kilowatts."
+                return "No, the house is not importing from the grid right now."
+            return "I could not determine current grid import status."
+
+        if any(x in q for x in [
+            "how much power is the house using",
+            "house power usage",
+            "current power usage",
+            "how much electricity is the house using",
+            "current house load",
+            "how much power are we using",
+        ]):
+            watts = _fmt_w(current_power_watts or power.get("power_watts"))
+            load_kw = _fmt_kw(interpreted_house_load_kw or energy_flow.get("estimated_house_load_kw"))
+            solar_kw = _fmt_kw(interpreted_solar_power_kw or energy_flow.get("solar_power_kw"))
+            grid_kw = _fmt_kw(interpreted_grid_import_kw or energy_flow.get("grid_import_kw"))
+
+            if load_kw and solar_kw and grid_kw:
+                return f"The estimated house load is {load_kw} kilowatts. Solar is producing {solar_kw} kilowatts. The house is importing {grid_kw} kilowatts from the grid."
+            if watts and load_kw:
+                return f"The house is currently using about {watts} watts, with an interpreted house load of {load_kw} kilowatts."
+            if load_kw:
+                return f"The interpreted house load is currently {load_kw} kilowatts."
+            if watts:
+                return f"The house is currently using about {watts} watts."
+            return "I could not determine current house power usage."
+
+        if any(x in q for x in [
+            "what is happening in the house",
+            "what's happening in the house",
+            "what is happening around the house",
+            "what's happening around the house",
+            "what is the house doing",
+            "what's the house doing",
+            "current house state",
+            "current state of the house",
+            "house state now",
+            "house status now",
+        ]):
+            parts = []
+
+            if occupied_rooms:
+                parts.append(f"occupied rooms are {_join_natural(occupied_rooms[:6])}")
+
+            if quiet_now is True:
+                parts.append("the house is currently quiet")
+            elif quiet_now is False:
+                parts.append("the house is not fully quiet")
+
+            load_kw = _fmt_kw(interpreted_house_load_kw)
+            if load_kw:
+                parts.append(f"estimated house load is {load_kw} kilowatts")
+
+            solar_kw = _fmt_kw(interpreted_solar_power_kw)
+            if solar_kw:
+                parts.append(f"solar production is {solar_kw} kilowatts")
+
+            grid_kw = _fmt_kw(interpreted_grid_import_kw)
+            if grid_kw and float(grid_kw) > 0:
+                parts.append(f"grid import is {grid_kw} kilowatts")
+
+            if offline_nodes:
+                parts.append(f"offline nodes include {_join_natural(offline_nodes[:4])}")
+
+            if parts:
+                return "Right now, " + ". ".join(parts) + "."
+
+            return "I retrieved the interpreted house state, but nothing important stands out right now."
+
+        return summarize_house_state(payload, mode="overview")
+
+    except Exception:
+        spoken = payload.get("spoken_summary")
+        if spoken:
+            return spoken
+        return "I retrieved the interpreted house state, but could not summarize it cleanly."
+
 
 
 def _build_answer_from_safe_result(action, result, question: str = ""):
@@ -2103,6 +2412,10 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
         if spoken:
             return spoken
         return "I retrieved the evening briefing, but could not render the spoken summary."
+
+    if target == "/ai/house_state":
+        return _summarize_house_state(data, action, question=question)
+
 
     if target == "/ai/daily_house_summary":
         spoken = data.get("spoken_summary")

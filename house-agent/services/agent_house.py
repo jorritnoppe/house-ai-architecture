@@ -951,8 +951,7 @@ def build_house_direct_response(question, intents, tool_data):
                 f"Reactive power is {reactive_txt} ({reactive_status})."
             ),
         }
-
-    if "anomaly_summary" in intents and "anomaly_summary" in tool_data:
+    if False and "anomaly_summary" in intents and "anomaly_summary" in tool_data:
         a = tool_data["anomaly_summary"]
 
         if a["status"] == "ok":

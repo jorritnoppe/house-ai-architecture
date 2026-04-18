@@ -151,7 +151,7 @@ def handle_agent_question(question: str):
             intents.append("AI_gen_network_scan")
 
     # Normalize Buderus / boiler intent interpretation
-    if "buderus" in q_lower or "boiler" in q_lower or "heating" in q_lower:
+    if "buderus" in q_lower or "boiler" in q_lower or "heating" in q_lower or "radiator" in q_lower:
         if (
             "boiler health" in q_lower
             or "boiler health summary" in q_lower
@@ -161,25 +161,85 @@ def handle_agent_question(question: str):
             if "buderus_boiler_health_summary" not in intents:
                 intents.append("buderus_boiler_health_summary")
 
-        elif "pressure" in q_lower or "system pressure" in q_lower or "boiler pressure" in q_lower:
+        elif (
+            "pressure" in q_lower
+            or "system pressure" in q_lower
+            or "boiler pressure" in q_lower
+        ):
             if "buderus_pressure_analysis" not in intents:
                 intents.append("buderus_pressure_analysis")
 
-        elif "error code" in q_lower or "fault" in q_lower or "diagnostic" in q_lower or "service code" in q_lower or "maintenance" in q_lower:
+        elif (
+            "error code" in q_lower
+            or "fault" in q_lower
+            or "diagnostic" in q_lower
+            or "diagnostics" in q_lower
+            or "service code" in q_lower
+            or "maintenance" in q_lower
+            or "boiler errors" in q_lower
+            or "any boiler errors" in q_lower
+            or "boiler error" in q_lower
+            or "any errors on the boiler" in q_lower
+            or "does the boiler have errors" in q_lower
+        ):
             if "buderus_diagnostics" not in intents:
                 intents.append("buderus_diagnostics")
 
-        elif "hot water" in q_lower or "tap water" in q_lower or "dhw" in q_lower or "warm water" in q_lower:
+        elif (
+            "hot water" in q_lower
+            or "tap water" in q_lower
+            or "dhw" in q_lower
+            or "warm water" in q_lower
+            or "heating water" in q_lower
+            or "making hot water" in q_lower
+        ):
             if "buderus_hot_water_status" not in intents:
                 intents.append("buderus_hot_water_status")
 
-        elif "heating active" in q_lower or "is heating running" in q_lower or "central heating" in q_lower or "radiator heating" in q_lower or "heating circuit" in q_lower:
+        elif (
+            "heating active" in q_lower
+            or "is heating running" in q_lower
+            or "is the heating running" in q_lower
+            or "heating running" in q_lower
+            or "is heating on" in q_lower
+            or "is the heating on" in q_lower
+            or "central heating" in q_lower
+            or "radiator heating" in q_lower
+            or "heating circuit" in q_lower
+            or "radiators heating" in q_lower
+        ):
             if "buderus_heating_status" not in intents:
                 intents.append("buderus_heating_status")
 
-        elif "buderus status" in q_lower or "boiler status" in q_lower or "heating status now" in q_lower or "boiler now" in q_lower or "current buderus" in q_lower:
+        elif (
+            "buderus status" in q_lower
+            or "boiler status" in q_lower
+            or "heating status now" in q_lower
+            or "boiler now" in q_lower
+            or "current buderus" in q_lower
+            or "what is the boiler doing" in q_lower
+            or "what's the boiler doing" in q_lower
+            or "boiler doing" in q_lower
+        ):
             if "buderus_current_status" not in intents:
                 intents.append("buderus_current_status")
+
+    # Normalize solar production intent interpretation
+    if "solar" in q_lower or "panel" in q_lower or "panels" in q_lower or "pv" in q_lower:
+        if (
+            "how much solar are we making" in q_lower
+            or "how much solar are we producing" in q_lower
+            or "what is solar producing now" in q_lower
+            or "solar producing now" in q_lower
+            or "current solar production" in q_lower
+            or "solar production now" in q_lower
+            or "how much are the panels making" in q_lower
+            or "how many watts are the panels making" in q_lower
+            or "how much are the solar panels making" in q_lower
+            or "what are the panels producing" in q_lower
+        ):
+            if "sma_production_overview" not in intents:
+                intents.append("sma_production_overview")
 
     # Normalize APC / UPS intent interpretation
     if "ups" in q_lower or "apc" in q_lower or "battery backup" in q_lower:
@@ -635,6 +695,29 @@ def handle_agent_question(question: str):
             "used_tools": ["buderus_boiler_health_summary"],
             "tool_data": {"buderus_boiler_health_summary": data},
             "answer": data.get("answer", "Buderus boiler health summary is available."),
+        }
+
+    # Direct SMA / solar return
+    if "sma_production_overview" in intents and "sma_production_overview" in tool_data:
+        data = tool_data["sma_production_overview"]
+        answer = data.get("answer")
+        if not answer:
+            current_power = data.get("current_power_w") or data.get("power_w") or data.get("ac_power_w")
+            if current_power is not None:
+                try:
+                    kw = round(float(current_power) / 1000.0, 3)
+                    answer = f"Solar is currently producing {kw} kW."
+                except Exception:
+                    answer = "Solar production data is available."
+            else:
+                answer = "Solar production data is available."
+        return {
+            "status": "ok",
+            "mode": "direct_tool",
+            "intents": intents,
+            "used_tools": ["sma_production_overview"],
+            "tool_data": {"sma_production_overview": data},
+            "answer": answer,
         }
 
     # Direct AI-generated network scan return
