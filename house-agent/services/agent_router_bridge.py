@@ -1650,6 +1650,68 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     if not q:
         return None
 
+
+
+    if any(x in q for x in [
+        "play youtube music",
+        "play some youtube music",
+        "play ai house music",
+        "start youtube music",
+        "start some youtube music",
+        "put on youtube music",
+        "put on some music",
+        "play music",
+    ]):
+        target = "living"
+
+        if any(x in q for x in ["desk", "deskroom", "desk room"]):
+            target = "desk"
+        elif any(x in q for x in ["bathroom", "badkamer"]):
+            target = "bathroom"
+        elif any(x in q for x in ["toilet", "wc"]):
+            target = "toilet"
+        elif any(x in q for x in ["living", "livingroom", "living room"]):
+            target = "living"
+
+        return {
+            "type": "route",
+            "target": "/tools/music/play_ai_house",
+            "params": {
+                "target": target,
+            },
+            "reason": "play_ai_house_music",
+        }
+
+    if any(x in q for x in [
+        "stop music",
+        "stop the music",
+        "turn off music",
+        "stop youtube music",
+        "stop ai house music",
+    ]):
+        target = "living"
+
+        if any(x in q for x in ["desk", "deskroom", "desk room"]):
+            target = "desk"
+        elif any(x in q for x in ["bathroom", "badkamer"]):
+            target = "bathroom"
+        elif any(x in q for x in ["toilet", "wc"]):
+            target = "toilet"
+        elif any(x in q for x in ["living", "livingroom", "living room"]):
+            target = "living"
+
+        return {
+            "type": "route",
+            "target": "/tools/music/stop_room",
+            "params": {
+                "target": target,
+            },
+            "reason": "stop_room_music",
+        }
+
+
+
+
     if any(x in q for x in [
         "is anyone downstairs",
         "anyone downstairs",
@@ -2009,6 +2071,16 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
 
     data = result.get("data", {}) or {}
     target = action.get("target", "")
+
+
+
+    if target == "/tools/music/play_ai_house":
+        return data.get("answer", "I started the AI house music.")
+
+    if target == "/tools/music/stop_room":
+        return data.get("answer", "I stopped the room music.")
+
+
 
     if target == "/ai/house_sensors":
         return _summarize_house_sensors(data, action, question=question)
@@ -2397,8 +2469,174 @@ def _summarize_house_sensors(sensor_result, action=None, question=None, user_que
     return " ".join(summary_parts)
 
 
+def _normalize_house_device_question(question: str) -> Optional[str]:
+    q = str(question or "").strip().lower()
+    if not q:
+        return None
+
+    boiler_tokens = ["boiler", "buderus", "heating", "radiator", "hot water", "tap water", "burner", "water"]
+    if not any(token in q for token in boiler_tokens):
+        return None
+
+    # Domestic hot water must be checked before generic heating phrases
+    if any(x in q for x in [
+        "is the boiler heating water",
+        "is boiler heating water",
+        "is hot water active",
+        "is the hot water active",
+        "is tap water heating",
+        "is the tap water heating",
+        "is domestic hot water active",
+        "is the boiler making hot water",
+        "is the boiler heating hot water",
+        "is water being heated",
+        "is the boiler doing hot water",
+    ]):
+        return "is the boiler heating water"
+
+    # Current overall boiler state
+    if any(x in q for x in [
+        "what is the boiler doing",
+        "what's the boiler doing",
+        "what is the boiler doing right now",
+        "what is boiler doing",
+        "boiler doing",
+        "boiler state",
+        "boiler status",
+        "what is the boiler status",
+        "what's the boiler status",
+        "what is the heating system doing",
+        "what is buderus doing",
+        "what is the buderus doing",
+    ]):
+        return "what is the boiler status"
+
+    # Heating circuit / central heating only
+    if any(x in q for x in [
+        "is the heating running",
+        "is heating running",
+        "is heating on",
+        "is the heating on",
+        "is central heating on",
+        "is central heating running",
+        "are the radiators heating",
+        "are radiators heating",
+        "is the boiler heating",
+        "is the boiler heating the house",
+    ]):
+        if "water" not in q and "hot water" not in q and "tap water" not in q:
+            return "is the heating running"
+
+    # Burner-specific
+    if any(x in q for x in [
+        "is the burner on",
+        "burner on",
+        "is the boiler burner on",
+        "is buderus burner on",
+    ]):
+        return "what is the boiler status"
+
+    return None
+
+
+
+def _is_live_house_status_domain(question: str) -> bool:
+    q = str(question or "").strip().lower()
+    if not q:
+        return False
+
+    live_tokens = [
+        "boiler",
+        "buderus",
+        "heating",
+        "radiator",
+        "burner",
+        "hot water",
+        "tap water",
+        "temperature",
+        "humidity",
+        "house status",
+        "power usage",
+        "solar",
+        "waste pickup",
+        "waste schedule",
+    ]
+    return any(token in q for token in live_tokens)
+
+def _compact_house_sensor_result_for_agent(exec_result: dict) -> dict:
+    if not isinstance(exec_result, dict):
+        return {"status": "error", "error": "invalid_exec_result"}
+
+    if exec_result.get("status") != "ok":
+        return {
+            "status": exec_result.get("status", "error"),
+            "error": exec_result.get("error"),
+        }
+
+    data = exec_result.get("data") or {}
+    if not isinstance(data, dict):
+        return {
+            "status": "ok",
+            "data": {},
+        }
+
+    rooms = data.get("rooms") or []
+    ranked_rooms = _build_ranked_room_intelligence(data)
+    human_rooms = _filter_human_likely_rooms(ranked_rooms)
+    background_rooms = _filter_background_like_rooms(ranked_rooms)
+
+    compact_rooms = []
+    for room in ranked_rooms[:8]:
+        compact_rooms.append({
+            "room": room.get("room_name") or room.get("room"),
+            "room_role": room.get("room_role"),
+            "classification": room.get("classification"),
+            "confidence_score": room.get("confidence_score"),
+            "human_likelihood": room.get("human_likelihood"),
+            "automation_likelihood": room.get("automation_likelihood"),
+            "priority_score": room.get("priority_score"),
+            "summary": room.get("summary"),
+            "reason_factors": (room.get("reason_factors") or [])[:3],
+        })
+
+    return {
+        "status": "ok",
+        "data": {
+            "minutes": data.get("minutes"),
+            "room_count": data.get("room_count", len(rooms)),
+            "summary": data.get("summary", {}),
+            "top_rooms": compact_rooms,
+            "likely_human_rooms": [
+                r.get("room_name") or r.get("room")
+                for r in human_rooms[:8]
+            ],
+            "background_like_rooms": [
+                r.get("room_name") or r.get("room")
+                for r in background_rooms[:8]
+            ],
+        },
+    }
+
+
+def _compact_safe_result_for_agent(action: dict, exec_result: dict) -> dict:
+    target = str((action or {}).get("target") or "")
+
+    if target == "/ai/house_sensors":
+        return _compact_house_sensor_result_for_agent(exec_result)
+
+    return exec_result
+
+
+def _compact_executor_result_for_response(action: dict, exec_result: dict) -> dict:
+    return _compact_safe_result_for_agent(action, exec_result)
+
+
+
 def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
-    action = _match_safe_action(question)
+    normalized_house_question = _normalize_house_device_question(question)
+    routed_question = normalized_house_question or question
+
+    action = _match_safe_action(routed_question)
     if action:
         auth_result = classify_action_auth(action)
 
@@ -2414,7 +2652,9 @@ def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
                 if isinstance(payload, dict):
                     exec_result["data"] = _enrich_house_sensor_payload_with_activity_reasons(payload)
 
-            answer = _build_answer_from_safe_result(action, exec_result, question=question)
+            compact_exec_result = _compact_safe_result_for_agent(action, exec_result)
+            answer = _build_answer_from_safe_result(action, exec_result, question=routed_question)
+
             return {
                 "status": "ok" if exec_result.get("status") == "ok" else exec_result.get("status", "error"),
                 "mode": "safe_executor",
@@ -2423,22 +2663,31 @@ def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
                 "tool_data": {
                     "safe_executor": {
                         "action": action,
-                        "result": exec_result,
+                        "result_status": compact_exec_result.get("status"),
+                        "result_type": (
+                            "compact_house_sensor_summary"
+                            if action.get("target") == "/ai/house_sensors"
+                            else "safe_result"
+                        ),
                     },
                     "auth_policy": auth_result,
+                    "normalized_question": normalized_house_question,
                 },
                 "answer": answer,
                 "auth_result": auth_result,
                 "executor_action": action,
-                "executor_result": exec_result,
+                "executor_result": _compact_executor_result_for_response(action, exec_result),
             }
+
+
+
 
         if auth_result.get("auth_level") == "approval_required":
             approval = get_pending_approval_service().create_request(
                 action=action,
                 auth_level=auth_result.get("auth_level"),
                 approval_method=auth_result.get("approval_method"),
-                question=question,
+                question=routed_question,
                 room_id=(action.get("params") or {}).get("room"),
                 requested_by="agent_query",
                 expires_in_seconds=90,
@@ -2451,6 +2700,7 @@ def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
                 "tool_data": {
                     "auth_policy": auth_result,
                     "approval": approval,
+                    "normalized_question": normalized_house_question,
                 },
                 "answer": (
                     f"This action requires approval before execution. "
@@ -2468,22 +2718,66 @@ def handle_house_or_ai_question(question: str) -> Dict[str, Any]:
             "used_tools": [],
             "tool_data": {
                 "auth_policy": auth_result,
+                "normalized_question": normalized_house_question,
             },
             "answer": auth_result.get("reason", "This action is blocked by policy."),
             "auth_result": auth_result,
             "executor_action": action,
         }
 
-    fallback = handle_agent_question(question)
+    fallback = handle_agent_question(routed_question)
+
     if isinstance(fallback, dict):
         fallback.setdefault("mode", "fallback_agent")
+        fallback.setdefault("tool_data", {})
+        if normalized_house_question:
+            fallback["tool_data"]["normalized_question"] = normalized_house_question
+
+        # prevent generic fluff for live house status questions
+        if (
+            _is_live_house_status_domain(question)
+            and str(fallback.get("mode", "")).lower() in {"fallback_model", "fallback_agent"}
+            and not fallback.get("used_tools")
+        ):
+            return {
+                "status": "ok",
+                "mode": "live_status_unresolved",
+                "intents": ["live_status_unresolved"],
+                "used_tools": [],
+                "tool_data": {
+                    "normalized_question": normalized_house_question,
+                    "original_result": fallback,
+                },
+                "answer": (
+                    "I understood this as a live house-status question, "
+                    "but I could not resolve it to structured house data."
+                ),
+            }
+
         return fallback
+
+    if _is_live_house_status_domain(question):
+        return {
+            "status": "ok",
+            "mode": "live_status_unresolved",
+            "intents": ["live_status_unresolved"],
+            "used_tools": [],
+            "tool_data": {
+                "normalized_question": normalized_house_question,
+            },
+            "answer": (
+                "I understood this as a live house-status question, "
+                "but I could not resolve it to structured house data."
+            ),
+        }
 
     return {
         "status": "ok",
         "mode": "fallback_agent",
         "intents": [],
         "used_tools": [],
-        "tool_data": {},
+        "tool_data": {
+            "normalized_question": normalized_house_question,
+        },
         "answer": str(fallback),
     }

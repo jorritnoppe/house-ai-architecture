@@ -8,7 +8,6 @@ from services.power_service import (
     get_energy_today_data,
 )
 
-# Reuse the existing Loxone AI-history helpers directly
 from routes.loxone_routes import (
     _ai_fetch_history,
     _ai_presence_items,
@@ -20,19 +19,12 @@ from services.netdata_service import get_all_nodes_overview, get_alarms, get_nod
 from services.service_health_service import get_local_service_health, get_service_health_for_node, get_services_overview
 from services.house_state_service import get_house_state, get_daily_house_summary
 from services.unified_playback_state_service import get_unified_playback_state
-
 from services.energy_service import energy_service
 from services.house_sensors_service import get_house_sensors
-
-
-
 from services.morning_briefing_service import get_morning_briefing
 from services.waste_schedule_service import get_waste_schedule_summary
 from services.evening_briefing_service import get_evening_briefing
-
-
-
-
+from services.lms_music_service import play_ai_house_music, stop_room_music
 
 
 def _execute_loxone_history_presence(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -156,7 +148,7 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
             if entry.get("status") != "ok":
                 result[node] = {
                     "status": "offline_or_error",
-                    "error": entry.get("error")
+                    "error": entry.get("error"),
                 }
                 continue
 
@@ -166,18 +158,18 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
                 "cpu_total_percent": summary.get("cpu_total_percent"),
                 "ram_used_percent": summary.get("ram_used_percent"),
                 "load1": summary.get("load1"),
-                "active_alarm_count": summary.get("active_alarm_count", 0)
+                "active_alarm_count": summary.get("active_alarm_count", 0),
             }
 
         return {
             "status": "ok",
-            "data": result
+            "data": result,
         }
 
     if path == "/ai/nodes/overview":
         return {
             "status": "ok",
-            "data": get_all_nodes_overview()
+            "data": get_all_nodes_overview(),
         }
 
     if path == "/ai/node/summary":
@@ -186,7 +178,7 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
             raise ValueError("Missing node parameter")
         return {
             "status": "ok",
-            "data": get_node_summary(node)
+            "data": get_node_summary(node),
         }
 
     if path == "/ai/node/alerts":
@@ -195,26 +187,26 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
             raise ValueError("Missing node parameter")
         return {
             "status": "ok",
-            "data": get_alarms(node)
+            "data": get_alarms(node),
         }
 
     if path == "/ai/service/health":
         return {
             "status": "ok",
-            "data": get_local_service_health()
+            "data": get_local_service_health(),
         }
 
     if path == "/ai/service/summary":
         node = (params or {}).get("node", "ai-server")
         return {
             "status": "ok",
-            "data": get_service_health_for_node(node)
+            "data": get_service_health_for_node(node),
         }
 
     if path == "/ai/services/overview":
         return {
             "status": "ok",
-            "data": get_services_overview()
+            "data": get_services_overview(),
         }
 
     if path == "/ai/unified_energy_summary":
@@ -237,5 +229,12 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
     if path == "/ai/daily_house_summary":
         return get_daily_house_summary()
 
-    raise ValueError(f"No internal executor mapped for route: {path}")
+    if path == "/tools/music/play_ai_house":
+        target = str((params or {}).get("target", "living")).strip().lower()
+        return play_ai_house_music(target)
 
+    if path == "/tools/music/stop_room":
+        target = str((params or {}).get("target", "living")).strip().lower()
+        return stop_room_music(target)
+
+    raise ValueError(f"No internal executor mapped for route: {path}")

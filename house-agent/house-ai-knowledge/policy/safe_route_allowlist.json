@@ -5,6 +5,8 @@
     "They should not create uncontrolled physical side effects."
   ],
   "routes": [
+    "/tools/music/play_ai_house",
+    "/tools/music/stop_room",
     "/ai/morning_briefing",
     "/ai/evening_briefing",
     "/ai/waste_schedule_summary",

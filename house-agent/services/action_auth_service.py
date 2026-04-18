@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 SAFE_READ_TARGETS = {
     "/ai/house_state",
     "/ai/playback_state",
@@ -33,7 +32,10 @@ SAFE_READ_TARGETS = {
     "/ai/pdata_full_overview",
     "/ai/unified_energy_summary",
     "/ai/unified_energy_snapshot",
+    "/tools/music/play_ai_house",
+    "/tools/music/stop_room",
 }
+
 
 APPROVAL_REQUIRED_TARGETS = {
     "/tools/audio/announce",
