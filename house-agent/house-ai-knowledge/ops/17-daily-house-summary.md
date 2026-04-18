@@ -149,3 +149,25 @@ Later this daily summary can be merged with:
 - spoken morning narrative
 
 That would become the full morning butler briefing layer.
+
+
+
+## Related extension: waste pickup awareness
+
+The house summary stack now has a working waste schedule source via Google Calendar.
+
+Current behavior:
+- Google Calendar auth was repaired
+- the waste schedule service can parse pickup events from the personal calendar source
+- normalized waste types currently include paper, PMD, GFT, rest waste, and glass
+
+Current spoken outputs:
+- `spoken_next`
+- `spoken_tomorrow`
+
+Validated example:
+- `The next pickup is paper on Tuesday.`
+
+Next intended integration:
+- add tomorrow waste pickup notice into evening summary
+- optionally add next pickup note into morning briefing

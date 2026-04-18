@@ -113,3 +113,27 @@ Resolution:
   - safe route allowlist
 - validated through `/agent/query`
 
+
+
+## Waste schedule integration
+Status: active and working
+
+Current state:
+- waste pickup events are now read from Google Calendar
+- source calendar currently resolves to `jorritnoppe@gmail.com`
+- detected waste types include:
+  - paper
+  - PMD
+  - GFT
+  - rest waste
+  - glass
+
+Validated behavior:
+- waste schedule summary returns full 2026 pickup list
+- `spoken_next` now renders in English
+- example: `The next pickup is paper on Tuesday.`
+
+Open follow-up:
+- integrate tomorrow pickup warnings into evening briefing
+- integrate next pickup mention into morning briefing when relevant
+- later add spoken reminder trigger for evening-before collection days
