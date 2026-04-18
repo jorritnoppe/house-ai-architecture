@@ -1874,7 +1874,40 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         "how much power are we using right now",
         "current house load",
         "house power usage",
-
+        "is the network okay",
+        "how is the network doing",
+        "is wifi okay",
+        "is the wifi okay",
+        "is the internet okay",
+        "network status",
+        "wifi status",
+        "internet status",
+        "is network data stale",
+        "is the network data stale",
+        "how fresh is the network data",
+        "is the wifi data stale",
+        "is the internet data stale",
+        "any unknown devices",
+        "are there unknown devices",
+        "unknown devices on the network",
+        "unknown network clients",
+        "unknown clients on the network",
+        "how many unknown network clients are there",
+        "how many clients are active",
+        "what is the wan latency",
+        "what is the network latency",
+        "which monitoring nodes are unavailable",
+        "what monitoring nodes are unavailable",
+        "which voice nodes are online",
+        "are any voice nodes online",
+        "is the house mostly idle right now",
+        "mostly idle right now",
+        "what warnings should i care about",
+        "are there any warning conditions i should care about",
+        "is anything important wrong right now",
+        "which voice nodes are offline",
+        "are any voice nodes offline",
+        "what voice nodes are offline",
 
     ]):
         return {
@@ -2144,12 +2177,23 @@ def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
         services = payload.get("services") or {}
         nodes_health = payload.get("nodes_health") or {}
         voice_nodes = payload.get("voice_nodes") or {}
+        network_interpretation = summary.get("network_interpretation") or payload.get("network_interpretation") or {}
 
         occupied_rooms = summary.get("occupied_rooms") or []
         quiet_now = summary.get("quiet_now")
         offline_nodes = summary.get("offline_nodes") or []
         service_warning_hosts = summary.get("service_warning_hosts") or []
+
         monitoring_unavailable_nodes = summary.get("monitoring_unavailable_nodes") or []
+
+
+
+
+        voice_nodes_offline = int(summary.get("voice_nodes_offline") or 0)
+        voice_node_interpretation = payload.get("voice_node_interpretation") or {}
+
+
+
 
         interpreted_house_load_kw = summary.get("interpreted_house_load_kw")
         interpreted_solar_power_kw = summary.get("interpreted_solar_power_kw")
@@ -2174,6 +2218,31 @@ def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
                 return f"{round(float(v))}"
             except Exception:
                 return None
+
+        if any(x in q for x in [
+            "is network data stale",
+            "is the network data stale",
+            "how fresh is the network data",
+            "is the wifi data stale",
+            "is the internet data stale",
+        ]):
+            freshness = str(network_interpretation.get("freshness") or "unknown").lower()
+            age = network_interpretation.get("snapshot_age_seconds")
+            is_stale = bool(network_interpretation.get("is_stale"))
+
+            if freshness == "fresh":
+                if age is not None:
+                    return f"Network data is fresh and about {int(age)} seconds old."
+                return "Network data is fresh."
+            if freshness == "aging":
+                if age is not None:
+                    return f"Network data is not stale yet, but it is already {int(age)} seconds old."
+                return "Network data is aging but not stale yet."
+            if is_stale:
+                if age is not None:
+                    return f"Yes, network data is stale and about {int(age)} seconds old."
+                return "Yes, network data appears stale."
+            return "I could not determine network data freshness."
 
         if any(x in q for x in [
             "is the house quiet",
@@ -2321,6 +2390,32 @@ def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
             if watts:
                 return f"The house is currently using about {watts} watts."
             return "I could not determine current house power usage."
+
+
+
+        if any(x in q for x in [
+            "which voice nodes are offline",
+            "are any voice nodes offline",
+            "what voice nodes are offline",
+        ]):
+            offline_list = []
+            if isinstance(voice_node_interpretation, dict):
+                for item in (voice_node_interpretation.get("offline_nodes") or []):
+                    if isinstance(item, dict):
+                        node_id = item.get("node_id")
+                        if node_id:
+                            offline_list.append(str(node_id))
+
+            if offline_list:
+                return f"Voice nodes currently offline are {_join_natural(offline_list[:6])}."
+            if voice_nodes_offline > 0:
+                return f"There are currently {voice_nodes_offline} voice nodes offline."
+            return "I do not currently see voice nodes offline."
+
+
+
+
+
 
         if any(x in q for x in [
             "what is happening in the house",

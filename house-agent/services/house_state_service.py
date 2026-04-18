@@ -12,6 +12,8 @@ from routes.loxone_routes import _ai_fetch_history, _ai_telemetry_latest
 from services.power_service import get_power_now_data, get_energy_summary_data
 from services.energy_service import energy_service
 from services.house_sensors_service import get_house_sensors
+from services.unifi_collector import collector as unifi_collector
+
 
 
 
@@ -109,6 +111,174 @@ def _get_latest_telemetry(minutes: int = 120, room: str | None = None, limit: in
     }
 
 
+
+
+def _build_network_interpretation(network: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(network, dict):
+        return {
+            "status": "error",
+            "spoken_summary": "Network data is unavailable.",
+            "overall": "unknown",
+            "devices_online": 0,
+            "devices_offline": 0,
+            "clients_active": 0,
+            "gateway_cpu_percent": None,
+            "gateway_mem_percent": None,
+            "wan_latency_ms": None,
+            "unknown_clients": 0,
+            "critical_devices_offline": [],
+            "backend": None,
+            "snapshot_age_seconds": None,
+            "freshness": "unknown",
+            "is_stale": True,
+            "timestamp": None,
+        }
+
+    status = str(network.get("status") or "unknown")
+    summary = network.get("summary") or {}
+    last_error = network.get("last_error")
+    backend = network.get("backend")
+    timestamp = network.get("timestamp")
+
+    overall = str(summary.get("overall") or "unknown")
+    devices_online = int(summary.get("device_count_online") or 0)
+    devices_offline = int(summary.get("device_count_offline") or 0)
+    clients_active = int(summary.get("client_count_active") or 0)
+    unknown_clients = max(
+        0,
+        int(clients_active - int(summary.get("mapped_clients") or 0)),
+    )
+    critical_devices_offline = list(summary.get("critical_offline") or [])
+
+    gateway_cpu_percent = None
+    gateway_mem_percent = None
+    wan_latency_ms = None
+
+    for row in summary.get("site_health_rows", []):
+        if not isinstance(row, dict):
+            continue
+        if row.get("subsystem") != "wan":
+            continue
+
+        gw_stats = row.get("gw_system-stats", {}) or {}
+        gateway_cpu_percent = _safe_float(gw_stats.get("cpu"))
+        gateway_mem_percent = _safe_float(gw_stats.get("mem"))
+
+        wan_info = row.get("uptime_stats", {}).get("WAN", {}) or {}
+        wan_latency_ms = _safe_float(wan_info.get("latency_average"))
+        break
+
+    snapshot_age_seconds = None
+    freshness = "unknown"
+    is_stale = True
+
+    if isinstance(timestamp, str) and timestamp.strip():
+        try:
+            from datetime import datetime, timezone
+
+            parsed = datetime.fromisoformat(timestamp)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+
+            now_utc = datetime.now(timezone.utc)
+            snapshot_age_seconds = max(
+                0,
+                int((now_utc - parsed.astimezone(timezone.utc)).total_seconds())
+            )
+
+            if snapshot_age_seconds <= 120:
+                freshness = "fresh"
+                is_stale = False
+            elif snapshot_age_seconds <= 600:
+                freshness = "aging"
+                is_stale = False
+            else:
+                freshness = "stale"
+                is_stale = True
+        except Exception:
+            snapshot_age_seconds = None
+            freshness = "unknown"
+            is_stale = True
+
+    if status != "ok":
+        spoken_summary = "Network data is currently unavailable."
+        if last_error:
+            spoken_summary = f"Network data is currently unavailable. Last error: {last_error}"
+    elif freshness == "stale":
+        if snapshot_age_seconds is not None:
+            spoken_summary = (
+                f"Network data is stale and about {snapshot_age_seconds} seconds old. "
+                f"The last known state showed {devices_online} infrastructure devices online "
+                f"and {clients_active} active clients."
+            )
+        else:
+            spoken_summary = (
+                f"Network data may be stale. The last known state showed {devices_online} "
+                f"infrastructure devices online and {clients_active} active clients."
+            )
+    elif critical_devices_offline:
+        spoken_summary = (
+            f"The network has issues. {len(critical_devices_offline)} critical devices are offline."
+        )
+    elif devices_offline > 0:
+        spoken_summary = (
+            f"The network is mostly healthy. {devices_online} devices are online, "
+            f"{devices_offline} are offline, and {clients_active} clients are active."
+        )
+    elif freshness == "aging":
+        spoken_summary = (
+            f"The network looks healthy, but the data is {snapshot_age_seconds} seconds old. "
+            f"{devices_online} infrastructure devices are online and {clients_active} clients are active."
+        )
+    else:
+        spoken_summary = (
+            f"The network looks healthy. {devices_online} infrastructure devices are online "
+            f"and {clients_active} clients are active."
+        )
+
+    return {
+        "status": status,
+        "spoken_summary": spoken_summary,
+        "overall": overall,
+        "devices_online": devices_online,
+        "devices_offline": devices_offline,
+        "clients_active": clients_active,
+        "gateway_cpu_percent": gateway_cpu_percent,
+        "gateway_mem_percent": gateway_mem_percent,
+        "wan_latency_ms": wan_latency_ms,
+        "unknown_clients": unknown_clients,
+        "critical_devices_offline": critical_devices_offline,
+        "backend": backend,
+        "last_error": last_error,
+        "timestamp": timestamp,
+        "snapshot_age_seconds": snapshot_age_seconds,
+        "freshness": freshness,
+        "is_stale": is_stale,
+    }
+
+
+def _get_network_summary() -> Dict[str, Any]:
+    data = unifi_collector.get_cache()
+    if not isinstance(data, dict):
+        return {
+            "status": "error",
+            "summary": {},
+            "devices": [],
+            "clients": [],
+            "events": [],
+            "alarms": [],
+            "topology_lite": {},
+            "last_error": "Invalid UniFi cache payload",
+            "backend": "sqlite",
+        }
+
+    result = dict(data)
+    result["backend"] = result.get("backend") or "sqlite"
+    return result
+
+
+
+
 def get_house_state() -> Dict[str, Any]:
     power = _safe_call(get_power_now_data, {"status": "error"})
     energy_summary = _safe_call(get_energy_summary_data, {"status": "error"})
@@ -140,6 +310,17 @@ def get_house_state() -> Dict[str, Any]:
         lambda: get_voice_node_registry().get_summary(),
         {"status": "error"},
     )
+
+    network = _safe_call(
+        _get_network_summary,
+        {"status": "error"},
+    )
+
+    network_interpretation = _safe_call(
+        lambda: _build_network_interpretation(network),
+        {"status": "error", "spoken_summary": "Network interpretation unavailable."},
+    )
+
     crypto_summary = _safe_call(
         lambda: crypto_tools.get_current_portfolio_summary(),
         {"status": "error"},
@@ -351,6 +532,7 @@ def get_house_state() -> Dict[str, Any]:
             "telemetry_rooms_seen": len(rooms_seen),
             "active_audio_rooms": active_rooms,
             "voice_nodes_online": ((voice_nodes.get("summary") or {}).get("online") if isinstance(voice_nodes, dict) else None),
+            "network_interpretation": network_interpretation if isinstance(network_interpretation, dict) else {},
             "crypto_total_value": crypto_summary.get("total_value") if isinstance(crypto_summary, dict) else None,
             "interpreted_house_load_kw": interpreted_house_load_kw,
             "interpreted_grid_import_kw": interpreted_grid_import_kw,
