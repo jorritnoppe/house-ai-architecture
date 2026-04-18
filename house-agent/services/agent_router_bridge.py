@@ -1940,16 +1940,49 @@ def _summarize_history_telemetry(data: dict, action: dict) -> str:
 
 
 
-def _summarize_waste_schedule(data: dict, action: dict) -> str:
+def _summarize_waste_schedule(data: dict, action: dict, question: str = "") -> str:
     if not isinstance(data, dict):
         return "I could not read the waste schedule."
+
+    q = str(question or "").strip().lower()
 
     spoken_tomorrow = str(data.get("spoken_tomorrow") or "").strip()
     spoken_next = str(data.get("spoken_next") or "").strip()
     next_pickup = data.get("next_pickup") or {}
     tomorrow_pickups = data.get("tomorrow_pickups") or []
 
+    asks_tomorrow = any(x in q for x in [
+        "tomorrow",
+        "garbage tomorrow",
+        "waste tomorrow",
+        "pickup tomorrow",
+        "bin tomorrow",
+        "what bin goes out tomorrow",
+        "what garbage goes out tomorrow",
+        "what waste goes out tomorrow",
+        "is there garbage tomorrow",
+        "is waste being collected tomorrow",
+    ])
+
+    asks_next = any(x in q for x in [
+        "next",
+        "next pickup",
+        "next waste pickup",
+        "when is the next waste pickup",
+        "what is the next pickup",
+        "when is the next pickup",
+    ])
+
+    if asks_tomorrow:
+        if spoken_tomorrow:
+            return spoken_tomorrow
+        if spoken_next:
+            return f"No, there is no waste pickup tomorrow. {spoken_next}"
+        return "No, there is no waste pickup tomorrow."
+
     if spoken_tomorrow:
+        if asks_next and spoken_next:
+            return spoken_next
         if spoken_next:
             return f"{spoken_tomorrow} {spoken_next}"
         return spoken_tomorrow
@@ -1961,8 +1994,8 @@ def _summarize_waste_schedule(data: dict, action: dict) -> str:
         return "There is waste pickup tomorrow."
 
     if next_pickup:
-        waste_type = next_pickup.get("waste_type") or "waste"
-        day_label = next_pickup.get("day_label") or "an upcoming day"
+        waste_type = str(next_pickup.get("waste_type") or "waste").strip()
+        day_label = str(next_pickup.get("day_label") or "an upcoming day").strip()
         return f"The next pickup is {waste_type} on {day_label}."
 
     return "I could not find any upcoming waste pickup events."
@@ -1984,7 +2017,8 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
         return _summarize_history_telemetry(data, action)
 
     if target == "/ai/waste_schedule_summary":
-        return _summarize_waste_schedule(data, action)
+        return _summarize_waste_schedule(data, action, question=question)
+
 
     if target == "/ai/morning_briefing":
         spoken = data.get("spoken_summary")
