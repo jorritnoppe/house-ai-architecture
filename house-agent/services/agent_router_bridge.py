@@ -1698,6 +1698,59 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
         }
 
     if any(x in q for x in [
+        "morning briefing",
+        "give me my morning briefing",
+        "good morning",
+        "morning summary",
+        "today briefing",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/morning_briefing",
+            "params": {},
+            "reason": "morning_briefing_query",
+        }
+
+    if any(x in q for x in [
+        "evening briefing",
+        "give me my evening briefing",
+        "tonight briefing",
+        "evening summary",
+        "night briefing",
+        "what should i know for tonight",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/evening_briefing",
+            "params": {},
+            "reason": "evening_briefing_query",
+        }
+
+    if any(x in q for x in [
+        "waste schedule",
+        "garbage schedule",
+        "trash schedule",
+        "bin schedule",
+        "pickup schedule",
+        "waste pickup",
+        "garbage pickup",
+        "trash pickup",
+        "when is the next pickup",
+        "what is the next pickup",
+        "is there garbage tomorrow",
+        "is waste being collected tomorrow",
+        "what bin goes out tomorrow",
+        "what garbage goes out tomorrow",
+        "what waste goes out tomorrow",
+    ]):
+        return {
+            "type": "route",
+            "target": "/ai/waste_schedule_summary",
+            "params": {},
+            "reason": "waste_schedule_query",
+        }
+
+    if any(x in q for x in [
         "daily house summary",
         "house briefing",
         "daily briefing",
@@ -1813,6 +1866,7 @@ def _match_safe_action(question: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+
 def _summarize_history_telemetry(data: dict, action: dict) -> str:
     items = data.get("items", []) or []
     room = (action.get("params") or {}).get("room")
@@ -1883,6 +1937,39 @@ def _summarize_history_telemetry(data: dict, action: dict) -> str:
     )
 
 
+
+
+
+def _summarize_waste_schedule(data: dict, action: dict) -> str:
+    if not isinstance(data, dict):
+        return "I could not read the waste schedule."
+
+    spoken_tomorrow = str(data.get("spoken_tomorrow") or "").strip()
+    spoken_next = str(data.get("spoken_next") or "").strip()
+    next_pickup = data.get("next_pickup") or {}
+    tomorrow_pickups = data.get("tomorrow_pickups") or []
+
+    if spoken_tomorrow:
+        if spoken_next:
+            return f"{spoken_tomorrow} {spoken_next}"
+        return spoken_tomorrow
+
+    if spoken_next:
+        return spoken_next
+
+    if tomorrow_pickups:
+        return "There is waste pickup tomorrow."
+
+    if next_pickup:
+        waste_type = next_pickup.get("waste_type") or "waste"
+        day_label = next_pickup.get("day_label") or "an upcoming day"
+        return f"The next pickup is {waste_type} on {day_label}."
+
+    return "I could not find any upcoming waste pickup events."
+
+
+
+
 def _build_answer_from_safe_result(action, result, question: str = ""):
     if result.get("status") != "ok":
         return "I could not complete that request."
@@ -1896,6 +1983,21 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
     if target == "/ai/loxone_history_telemetry_latest":
         return _summarize_history_telemetry(data, action)
 
+    if target == "/ai/waste_schedule_summary":
+        return _summarize_waste_schedule(data, action)
+
+    if target == "/ai/morning_briefing":
+        spoken = data.get("spoken_summary")
+        if spoken:
+            return spoken
+        return "I retrieved the morning briefing, but could not render the spoken summary."
+
+    if target == "/ai/evening_briefing":
+        spoken = data.get("spoken_summary")
+        if spoken:
+            return spoken
+        return "I retrieved the evening briefing, but could not render the spoken summary."
+
     if target == "/ai/daily_house_summary":
         spoken = data.get("spoken_summary")
         if spoken:
@@ -1903,6 +2005,8 @@ def _build_answer_from_safe_result(action, result, question: str = ""):
         return "I retrieved the daily house summary, but could not render the spoken summary."
 
     return "I found some data, but I could not summarize it yet."
+
+
 
 
 def _summarize_house_sensors(sensor_result, action=None, question=None, user_question=None):

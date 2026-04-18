@@ -26,6 +26,11 @@ from services.house_sensors_service import get_house_sensors
 
 
 
+from services.morning_briefing_service import get_morning_briefing
+from services.waste_schedule_service import get_waste_schedule_summary
+from services.evening_briefing_service import get_evening_briefing
+
+
 
 
 
@@ -115,6 +120,16 @@ def _execute_loxone_history_room_activity(params: Dict[str, Any]) -> Dict[str, A
 def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
     params = params or {}
 
+    if path == "/ai/morning_briefing":
+        return get_morning_briefing()
+
+    if path == "/ai/evening_briefing":
+        return get_evening_briefing()
+
+    if path == "/ai/waste_schedule_summary":
+        days = int((params or {}).get("days", 140))
+        return get_waste_schedule_summary(days=days)
+
     if path == "/ai/power_now":
         return get_power_now_data()
 
@@ -183,7 +198,6 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
             "data": get_alarms(node)
         }
 
-
     if path == "/ai/service/health":
         return {
             "status": "ok",
@@ -203,13 +217,11 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
             "data": get_services_overview()
         }
 
-
     if path == "/ai/unified_energy_summary":
         return energy_service.get_energy_ai_summary()
 
     if path == "/ai/unified_energy_snapshot":
         return energy_service.get_live_snapshot()
-
 
     if path == "/ai/playback_state":
         return get_unified_playback_state(cooldown_seconds=2)
@@ -225,5 +237,5 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
     if path == "/ai/daily_house_summary":
         return get_daily_house_summary()
 
-
     raise ValueError(f"No internal executor mapped for route: {path}")
+

@@ -1,13 +1,17 @@
 {
-  "version": "2026-04-12",
+  "version": "2026-04-18",
   "notes": [
     "Safe routes are read-oriented and suitable for autonomous AI use.",
     "They should not create uncontrolled physical side effects."
   ],
   "routes": [
+    "/ai/morning_briefing",
+    "/ai/evening_briefing",
+    "/ai/waste_schedule_summary",
     "/ai/audio_resolve_control",
     "/ai/audio_tool_targets",
     "/ai/cheapest_hours_today",
+    "/ai/daily_house_summary",
     "/ai/electricity_cost_last_24h",
     "/ai/electricity_cost_today",
     "/ai/electricity_price_now",
@@ -17,6 +21,7 @@
     "/ai/house_briefing_today",
     "/ai/house_facts_now",
     "/ai/house_facts_today",
+    "/ai/house_sensors",
     "/ai/house_state",
     "/ai/loxone_history_presence_ai",
     "/ai/loxone_history_room_activity_ai",
@@ -59,8 +64,6 @@
     "/voice/logs",
     "/voice/player_status/<player_key>",
     "/voice/players",
-    "/voice/status",
-    "/ai/house_sensors",
-    "/ai/daily_house_summary"
+    "/voice/status"
   ]
 }
