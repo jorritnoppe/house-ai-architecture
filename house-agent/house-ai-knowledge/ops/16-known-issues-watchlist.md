@@ -137,3 +137,32 @@ Open follow-up:
 - integrate tomorrow pickup warnings into evening briefing
 - integrate next pickup mention into morning briefing when relevant
 - later add spoken reminder trigger for evening-before collection days
+
+
+## Waste schedule and briefing routing
+Status: resolved and active
+
+Resolved issues:
+- voice/agent questions about waste schedule now route through the safe executor
+- `/ai/waste_schedule_summary` is available as a safe-read route
+- morning briefing includes waste pickup context
+- evening briefing includes waste pickup context
+- tomorrow-specific waste questions now answer naturally
+
+Validated behavior:
+- `what is the waste schedule` -> safe executor -> `/ai/waste_schedule_summary`
+- `when is the next waste pickup` -> `The next pickup is paper on Tuesday.`
+- `is there garbage tomorrow` -> `No, there is no waste pickup tomorrow. The next pickup is paper on Tuesday.`
+- `give me my evening briefing` -> safe executor -> `/ai/evening_briefing`
+
+Notes:
+- waste events are read from Google Calendar via the personal calendar source
+- output wording is English
+- no credentials or tokens are stored in the mirrored repo
+
+Open follow-up:
+- if pickup is tomorrow, evening briefing can later say to take bins outside tonight
+- later allow scheduled spoken reminder playback
+
+
+

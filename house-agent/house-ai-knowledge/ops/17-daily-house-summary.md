@@ -171,3 +171,39 @@ Validated example:
 Next intended integration:
 - add tomorrow waste pickup notice into evening summary
 - optionally add next pickup note into morning briefing
+
+
+## Briefing extension: waste-aware butler flow
+
+The daily house summary stack now supports waste pickup awareness through the safe internal route layer.
+
+Implemented routes:
+- `/ai/waste_schedule_summary`
+- `/ai/morning_briefing`
+- `/ai/evening_briefing`
+
+Implemented behavior:
+- morning briefing includes the next waste pickup when useful
+- evening briefing includes the next waste pickup when useful
+- tomorrow-specific waste questions now return explicit wording
+- all of this is routed through safe executor paths, not fallback agent guessing
+
+Validated examples:
+- `what is the waste schedule`
+- `when is the next waste pickup`
+- `is there garbage tomorrow`
+- `give me my morning briefing`
+- `give me my evening briefing`
+
+Example current wording:
+- `The next pickup is paper on Tuesday.`
+- `No, there is no waste pickup tomorrow. The next pickup is paper on Tuesday.`
+
+Design note:
+This establishes the standard pattern for future butler integrations:
+1. source service
+2. safe read route
+3. internal executor mapping
+4. allowlist entry
+5. voice phrase routing
+6. natural spoken summarizer
