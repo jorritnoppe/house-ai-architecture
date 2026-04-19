@@ -1,9 +1,3 @@
-
----
-
-## 2) `~/house-agent/ARCHITECTURE_OVERVIEW.md`
-
-```md id="pwk0vc"
 # House AI Architecture Overview
 
 This document describes how the House AI system is structured, how the two repositories relate to each other, how runtime flows work on the AI server, and what engineering workflow must be followed for safe development.
