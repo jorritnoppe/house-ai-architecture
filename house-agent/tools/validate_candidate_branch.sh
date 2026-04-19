@@ -116,13 +116,23 @@ run_compile_check() {
 
   PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-  mapfile -t PY_FILES < <(git ls-files '*.py')
+  mapfile -t PY_FILES < <(find . -type f -name '*.py' \
+    -not -path './.git/*' \
+    -not -path './venv/*' \
+    -not -path './__pycache__/*' \
+    -not -path './validation_logs/*' \
+    -not -path './tmp/*' \
+    -not -path './run/*' \
+    | sort)
+
   if [ "${#PY_FILES[@]}" -eq 0 ]; then
     fail_validation "compile" "no Python files found in workspace"
   fi
 
   "$PYTHON_BIN" -m py_compile "${PY_FILES[@]}"
 }
+
+
 
 probe_question() {
   local q="$1"
@@ -201,15 +211,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+
+
 echo "===== FETCH CANDIDATE BRANCH ====="
 cd "$PUBLIC_REPO"
 git fetch "$PUBLIC_REMOTE" "$BRANCH" || fail_validation "fetch" "unable to fetch candidate branch"
 git fetch "$PUBLIC_REMOTE" main || fail_validation "fetch_base" "unable to fetch public main"
 
-CANDIDATE_COMMIT="$(git rev-parse FETCH_HEAD)"
-echo "candidate_commit=$CANDIDATE_COMMIT"
+CANDIDATE_COMMIT="$(git rev-parse "$PUBLIC_REMOTE/$BRANCH")" || fail_validation "candidate_commit" "unable to resolve candidate branch commit"
+BASE_COMMIT="$(git rev-parse "$BASE_REF")" || fail_validation "base_commit" "unable to resolve base ref commit"
 
-mapfile -t PUBLIC_CHANGED < <(git diff --name-only "$BASE_REF" "$CANDIDATE_COMMIT")
+echo "candidate_commit=$CANDIDATE_COMMIT"
+echo "base_commit=$BASE_COMMIT"
+
+mapfile -t PUBLIC_CHANGED < <(git diff --name-only "$BASE_COMMIT" "$CANDIDATE_COMMIT")
+
+
+
 if [ "${#PUBLIC_CHANGED[@]}" -eq 0 ]; then
   fail_validation "diff" "candidate branch has no changed files vs base"
 fi
