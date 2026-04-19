@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/path_policy.sh"
+
 LIVE_REPO="${LIVE_REPO:-$HOME/house-agent}"
 PUBLIC_REPO="${PUBLIC_REPO:-$HOME/house-ai-architecture}"
 PUBLIC_SUBDIR="${PUBLIC_SUBDIR:-house-agent}"
@@ -26,33 +29,6 @@ Examples:
 EOF
   exit 1
 fi
-
-is_blocked_path() {
-  local p="$1"
-
-  case "$p" in
-    .env|.env.*)
-      return 0
-      ;;
-    secrets/*|data/*|runtime/*|logs/*|validation_logs/*|tmp/*|run/*)
-      return 0
-      ;;
-    *secrets*|*secret*|*token*|*credential*|*credentials*)
-      return 0
-      ;;
-    *.db|*.sqlite|*.sqlite3|*.pem|*.key|*.crt|*.p12|*.pfx)
-      return 0
-      ;;
-    *__pycache__/*|__pycache__/*|*.pyc|*.bak|*.save|*pre_fix*|*.log)
-      return 0
-      ;;
-    .git/*)
-      return 0
-      ;;
-  esac
-
-  return 1
-}
 
 for rel in "$@"; do
   if is_blocked_path "$rel"; then
