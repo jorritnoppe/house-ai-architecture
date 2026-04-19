@@ -60,7 +60,17 @@ probe_question() {
   echo "--- PROBE: $q ---"
   curl -fsS -X POST "$BASE_URL/agent/query" \
     -H "Content-Type: application/json" \
-    -d "{\"question\":\"$q\"}" | python3 -m json.tool
+    -d "{\"question\":\"$q\"}" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+compact = {
+    "question": data.get("question"),
+    "status": data.get("status"),
+    "mode": data.get("mode"),
+    "answer": data.get("answer"),
+}
+print(json.dumps(compact, indent=2))
+'
 }
 
 probe_question "is anyone home"
