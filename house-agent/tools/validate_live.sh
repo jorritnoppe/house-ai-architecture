@@ -56,11 +56,17 @@ echo "===== 3) DIRECT PROBE QUESTIONS ====="
 
 probe_question() {
   local q="$1"
+  local response
+  local status
+
   echo
   echo "--- PROBE: $q ---"
-  curl -fsS -X POST "$BASE_URL/agent/query" \
+
+  response="$(curl -fsS -X POST "$BASE_URL/agent/query" \
     -H "Content-Type: application/json" \
-    -d "{\"question\":\"$q\"}" | python3 -c '
+    -d "{\"question\":\"$q\"}")"
+
+  echo "$response" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 compact = {
@@ -71,6 +77,14 @@ compact = {
 }
 print(json.dumps(compact, indent=2))
 '
+
+  status="$(echo "$response" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("status", ""))')"
+
+  if [ "$status" != "ok" ]; then
+    echo
+    echo "VALIDATION FAILED: probe returned non-ok status for: $q" >&2
+    exit 1
+  fi
 }
 
 probe_question "is anyone home"
