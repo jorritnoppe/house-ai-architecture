@@ -217,7 +217,7 @@ def _build_activity_facts(house_state: Dict[str, Any], facts: List[Dict[str, Any
             facts,
             category="activity",
             message=f"Presence is currently detected in {_join_natural(occupied_labels[:5])}.",
-            priority=68,
+            priority=110,
         )
 
     if lighting_labels:

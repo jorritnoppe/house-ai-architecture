@@ -2262,16 +2262,18 @@ def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
             "occupied right now",
             "occupancy",
         ]):
-            if occupied_rooms:
-                return f"Occupied rooms right now are {_join_natural(occupied_rooms[:6])}."
+            occupied_labels = [_human_room_label(x) for x in occupied_rooms if str(x).strip()]
+            if occupied_labels:
+                return f"Occupied rooms right now are {_join_natural(occupied_labels[:6])}."
             return "I do not currently see any occupied rooms."
 
         if any(x in q for x in [
             "which rooms are active",
             "what rooms are active",
         ]):
-            if occupied_rooms:
-                return f"The rooms currently showing the clearest activity are {_join_natural(occupied_rooms[:6])}."
+            occupied_labels = [_human_room_label(x) for x in occupied_rooms if str(x).strip()]
+            if occupied_labels:
+                return f"The rooms currently showing the clearest activity are {_join_natural(occupied_labels[:6])}."
             return "I do not currently see strongly active rooms right now."
 
         if any(x in q for x in [
@@ -2280,8 +2282,9 @@ def _summarize_house_state(data: dict, action: dict, question: str = "") -> str:
             "is anyone home",
             "anyone home",
         ]):
-            if occupied_rooms:
-                return f"Yes, the house appears occupied. Presence is currently detected in {_join_natural(occupied_rooms[:6])}."
+            occupied_labels = [_human_room_label(x) for x in occupied_rooms if str(x).strip()]
+            if occupied_labels:
+                return f"Yes, the house appears occupied. Presence is currently detected in {_join_natural(occupied_labels[:6])}."
             if quiet_now is True:
                 return "I do not currently see strong signs of occupancy, and the house appears quiet."
             return "I do not currently see strong signs of occupancy."
