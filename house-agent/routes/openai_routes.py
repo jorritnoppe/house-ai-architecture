@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from services.agent_service import handle_agent_question
+from services.agent_router_bridge import handle_house_or_ai_question
 from services.experimental_approval_service import (
     parse_experimental_approval_question,
     execute_experimental_approval,
@@ -139,8 +139,7 @@ def openai_chat_completions():
             },
         })
 
-    result = handle_agent_question(question)
-
+    result = handle_house_or_ai_question(question)
     return jsonify({
         "id": "chatcmpl-house-agent",
         "object": "chat.completion",
