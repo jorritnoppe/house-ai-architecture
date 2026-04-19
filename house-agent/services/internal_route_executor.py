@@ -26,6 +26,9 @@ from services.waste_schedule_service import get_waste_schedule_summary
 from services.evening_briefing_service import get_evening_briefing
 from services.lms_music_service import play_ai_house_music, stop_room_music
 
+from services.unifi_collector import collector as unifi_collector
+
+
 
 def _execute_loxone_history_presence(params: Dict[str, Any]) -> Dict[str, Any]:
     minutes = int((params or {}).get("minutes", 60))
@@ -236,5 +239,63 @@ def execute_internal_route(path: str, params: Dict[str, Any] | None = None) -> D
     if path == "/tools/music/stop_room":
         target = str((params or {}).get("target", "living")).strip().lower()
         return stop_room_music(target)
+
+
+
+    if path == "/ai/network/summary":
+        data = unifi_collector.get_cache()
+        if not isinstance(data, dict):
+            return {
+                "status": "error",
+                "error": "Invalid UniFi cache payload",
+                "backend": "sqlite",
+            }
+        result = dict(data)
+        result["backend"] = result.get("backend") or "sqlite"
+        return result
+
+    if path == "/ai/network/summary/compact":
+        data = unifi_collector.get_cache()
+        summary = data.get("summary", {}) if isinstance(data, dict) else {}
+        clients = data.get("clients", []) if isinstance(data, dict) else []
+
+        gw_cpu = None
+        gw_mem = None
+        wan_latency = None
+
+        for row in summary.get("site_health_rows", []):
+            if row.get("subsystem") == "wan":
+                gw_stats = row.get("gw_system-stats", {}) or {}
+                gw_cpu = gw_stats.get("cpu")
+                gw_mem = gw_stats.get("mem")
+                wan_info = row.get("uptime_stats", {}).get("WAN", {}) or {}
+                wan_latency = wan_info.get("latency_average")
+
+        unknown_count = sum(
+            1 for c in clients
+            if c.get("role") == "unknown" or c.get("room") == "unknown"
+        )
+
+        top_talker = None
+        top_clients = summary.get("top_clients", [])
+        if top_clients:
+            top_talker = top_clients[0].get("name")
+
+        return {
+            "status": data.get("status") if isinstance(data, dict) else "error",
+            "timestamp": data.get("timestamp") if isinstance(data, dict) else None,
+            "overall": summary.get("overall", "unknown"),
+            "devices_online": summary.get("device_count_online", 0),
+            "devices_offline": summary.get("device_count_offline", 0),
+            "clients_active": summary.get("client_count_active", 0),
+            "gateway_cpu_percent": gw_cpu,
+            "gateway_mem_percent": gw_mem,
+            "wan_latency_ms": wan_latency,
+            "unknown_clients": unknown_count,
+            "top_talker": top_talker,
+            "last_error": data.get("last_error") if isinstance(data, dict) else "Invalid UniFi cache payload",
+            "backend": "sqlite",
+        }
+
 
     raise ValueError(f"No internal executor mapped for route: {path}")

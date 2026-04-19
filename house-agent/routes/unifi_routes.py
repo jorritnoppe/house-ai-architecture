@@ -32,9 +32,37 @@ def network_summary_compact():
     if top_clients:
         top_talker = top_clients[0].get("name")
 
+    freshness = "unknown"
+    snapshot_age_seconds = None
+    timestamp = cache.get("timestamp")
+
+    if isinstance(timestamp, str) and timestamp.strip():
+        try:
+            from datetime import datetime, timezone
+
+            parsed = datetime.fromisoformat(timestamp)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+
+            now_utc = datetime.now(timezone.utc)
+            snapshot_age_seconds = max(
+                0,
+                int((now_utc - parsed.astimezone(timezone.utc)).total_seconds())
+            )
+
+            if snapshot_age_seconds <= 120:
+                freshness = "fresh"
+            elif snapshot_age_seconds <= 600:
+                freshness = "aging"
+            else:
+                freshness = "stale"
+        except Exception:
+            freshness = "unknown"
+            snapshot_age_seconds = None
+
     return jsonify({
         "status": cache.get("status"),
-        "timestamp": cache.get("timestamp"),
+        "timestamp": timestamp,
         "overall": summary.get("overall", "unknown"),
         "devices_online": summary.get("device_count_online", 0),
         "devices_offline": summary.get("device_count_offline", 0),
@@ -45,7 +73,12 @@ def network_summary_compact():
         "unknown_clients": unknown_count,
         "top_talker": top_talker,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
+        "snapshot_age_seconds": snapshot_age_seconds,
+        "freshness": freshness,
+        "is_stale": freshness == "stale",
     })
+
 
 
 
@@ -103,8 +136,8 @@ def network_alerts():
         "count": len(alerts),
         "alerts": alerts,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
-
 
 
 @unifi_bp.route("/ai/network/inventory", methods=["GET"])
@@ -162,9 +195,8 @@ def network_inventory():
         "count": len(inventory),
         "inventory": inventory,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
-
-
 
 
 @unifi_bp.route("/ai/network/wifi-links", methods=["GET"])
@@ -198,7 +230,9 @@ def network_wifi_links():
         "timestamp": cache.get("timestamp"),
         "wifi_links": grouped,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
+
 
 @unifi_bp.route("/ai/network/switch-ports", methods=["GET"])
 def network_switch_ports():
@@ -211,8 +245,6 @@ def network_switch_ports():
         for d in devices
         if d.get("type") in ("usw", "udm", "uxg", "ugw")
     }
-
-
 
     grouped = {}
     for c in clients:
@@ -236,6 +268,7 @@ def network_switch_ports():
         "timestamp": cache.get("timestamp"),
         "switch_ports": grouped,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -328,7 +361,8 @@ def network_health_report():
             for c in unknown_clients
         ],
         "top_talkers": summary.get("top_clients", []),
-        "last_error": cache.get("last_error")
+        "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -340,6 +374,7 @@ def network_summary():
         "timestamp": cache.get("timestamp"),
         "summary": cache.get("summary"),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -351,6 +386,7 @@ def network_devices():
         "timestamp": cache.get("timestamp"),
         "devices": cache.get("devices", []),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -362,6 +398,7 @@ def network_clients():
         "timestamp": cache.get("timestamp"),
         "clients": cache.get("clients", []),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -374,6 +411,7 @@ def network_events():
         "events": cache.get("events", []),
         "alarms": cache.get("alarms", []),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -385,6 +423,7 @@ def network_topology_lite():
         "timestamp": cache.get("timestamp"),
         "topology_lite": cache.get("topology_lite", {}),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -397,6 +436,7 @@ def network_reload_assets():
         "status": "ok",
         "message": "UniFi asset map reloaded",
         "timestamp": cache.get("timestamp"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -415,6 +455,7 @@ def network_critical():
         "critical_devices": critical_devices,
         "critical_clients": critical_clients,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -422,17 +463,15 @@ def network_critical():
 def network_offline():
     cache = collector.get_cache()
     devices = cache.get("devices", [])
-    clients = cache.get("clients", [])
-
     offline_devices = [d for d in devices if d.get("state") != "online"]
-    stale_clients = [c for c in clients if not c.get("ip")]
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
-        "offline_devices": offline_devices,
-        "stale_clients": stale_clients,
+        "count": len(offline_devices),
+        "devices": offline_devices,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -440,58 +479,45 @@ def network_offline():
 def network_portable():
     cache = collector.get_cache()
     clients = cache.get("clients", [])
-
-    portable_clients = [
-        c for c in clients
-        if c.get("portable") or c.get("room") == "all"
-    ]
+    portable_clients = [c for c in clients if c.get("portable") or c.get("room") == "all"]
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
-        "portable_clients": portable_clients,
         "count": len(portable_clients),
+        "clients": portable_clients,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
 @unifi_bp.route("/ai/network/unknown", methods=["GET"])
 def network_unknown():
     cache = collector.get_cache()
-    devices = cache.get("devices", [])
     clients = cache.get("clients", [])
-
-    unknown_devices = [d for d in devices if not d.get("mapped")]
-    unknown_clients = [
-        c for c in clients
-        if (not c.get("mapped")) or c.get("role") in ("unknown", "client")
-    ]
+    unknown_clients = [c for c in clients if c.get("role") == "unknown" or c.get("room") == "unknown"]
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
-        "unknown_devices": unknown_devices,
-        "unknown_clients": unknown_clients,
+        "count": len(unknown_clients),
+        "clients": unknown_clients,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
 @unifi_bp.route("/ai/network/top-talkers", methods=["GET"])
 def network_top_talkers():
     cache = collector.get_cache()
-    clients = cache.get("clients", [])
-
-    ranked = sorted(
-        clients,
-        key=lambda x: x.get("total_bytes", 0),
-        reverse=True
-    )[:20]
+    summary = cache.get("summary", {})
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
-        "top_talkers": ranked,
+        "top_talkers": summary.get("top_clients", []),
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
@@ -501,56 +527,57 @@ def network_rooms():
     devices = cache.get("devices", [])
     clients = cache.get("clients", [])
 
-    rooms = {}
+    grouped = {}
 
-    def add_item(room_name, item_type, item):
-        room_key = room_name or "unknown"
-        if room_key not in rooms:
-            rooms[room_key] = {
-                "devices": [],
-                "clients": []
-            }
-        rooms[room_key][item_type].append(item)
+    for item in devices:
+        room = item.get("room") or "unknown"
+        grouped.setdefault(room, {"devices": [], "clients": []})
+        grouped[room]["devices"].append(item)
 
-    for d in devices:
-        add_item(d.get("room"), "devices", d)
-
-    for c in clients:
-        add_item(c.get("room"), "clients", c)
+    for item in clients:
+        room = item.get("room") or "unknown"
+        grouped.setdefault(room, {"devices": [], "clients": []})
+        grouped[room]["clients"].append(item)
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
-        "rooms": rooms,
+        "rooms": grouped,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
 
 
 @unifi_bp.route("/ai/network/device/<path:query>", methods=["GET"])
-def network_device_lookup(query):
+def network_device_query(query: str):
     cache = collector.get_cache()
     devices = cache.get("devices", [])
     clients = cache.get("clients", [])
 
-    q = str(query).strip().lower()
+    q = str(query or "").strip().lower()
 
     matched_devices = [
         d for d in devices
-        if q in str(d.get("name", "")).lower() or q == str(d.get("mac", "")).lower()
+        if q in str(d.get("name", "")).lower()
+        or q in str(d.get("ip", "")).lower()
+        or q in str(d.get("mac", "")).lower()
+        or q in str(d.get("role", "")).lower()
     ]
+
     matched_clients = [
         c for c in clients
         if q in str(c.get("name", "")).lower()
-        or q in str(c.get("hostname", "")).lower()
-        or q == str(c.get("mac", "")).lower()
-        or q == str(c.get("ip", "")).lower()
+        or q in str(c.get("ip", "")).lower()
+        or q in str(c.get("mac", "")).lower()
+        or q in str(c.get("role", "")).lower()
     ]
 
     return jsonify({
         "status": cache.get("status"),
         "timestamp": cache.get("timestamp"),
         "query": query,
-        "devices": matched_devices,
-        "clients": matched_clients,
+        "matched_devices": matched_devices,
+        "matched_clients": matched_clients,
         "last_error": cache.get("last_error"),
+        "backend": cache.get("backend"),
     })
