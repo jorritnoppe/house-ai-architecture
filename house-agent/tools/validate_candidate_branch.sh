@@ -132,8 +132,6 @@ run_compile_check() {
   "$PYTHON_BIN" -m py_compile "${PY_FILES[@]}"
 }
 
-
-
 probe_question() {
   local q="$1"
   local response
@@ -210,8 +208,6 @@ cleanup() {
   rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
-
-
 
 echo "===== FETCH CANDIDATE BRANCH ====="
 cd "$PUBLIC_REPO"
