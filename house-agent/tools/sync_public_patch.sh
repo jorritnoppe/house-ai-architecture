@@ -34,13 +34,16 @@ is_blocked_path() {
     .env|.env.*)
       return 0
       ;;
-    secrets/*|data/*|runtime/*|logs/*|validation_logs/*)
+    secrets/*|data/*|runtime/*|logs/*|validation_logs/*|tmp/*|run/*)
+      return 0
+      ;;
+    *secrets*|*secret*|*token*|*credential*|*credentials*)
       return 0
       ;;
     *.db|*.sqlite|*.sqlite3|*.pem|*.key|*.crt|*.p12|*.pfx)
       return 0
       ;;
-    *__pycache__/*|*.pyc|*.bak|*.save|*pre_fix*|*.log)
+    *__pycache__/*|__pycache__/*|*.pyc|*.bak|*.save|*pre_fix*|*.log)
       return 0
       ;;
     .git/*)
@@ -50,6 +53,15 @@ is_blocked_path() {
 
   return 1
 }
+
+for rel in "$@"; do
+  if is_blocked_path "$rel"; then
+    echo "REFUSING blocked path: $rel" >&2
+    exit 1
+  fi
+done
+
+
 
 copy_one() {
   local rel="$1"
