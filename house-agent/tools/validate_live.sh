@@ -58,6 +58,7 @@ probe_question() {
   local q="$1"
   local response
   local status
+  local mode
 
   echo
   echo "--- PROBE: $q ---"
@@ -79,13 +80,21 @@ print(json.dumps(compact, indent=2))
 '
 
   status="$(echo "$response" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("status", ""))')"
+  mode="$(echo "$response" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))')"
 
   if [ "$status" != "ok" ]; then
     echo
     echo "VALIDATION FAILED: probe returned non-ok status for: $q" >&2
     exit 1
   fi
+
+  if [ -z "$mode" ]; then
+    echo
+    echo "VALIDATION FAILED: probe returned empty mode for: $q" >&2
+    exit 1
+  fi
 }
+
 
 probe_question "is anyone home"
 probe_question "is the house quiet"
