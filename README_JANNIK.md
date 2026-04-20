@@ -238,3 +238,139 @@ Structured and intentional exploration
 
 AI systems are not about generating text.
 They are about safely turning reasoning into action.
+
+
+
+
+
+
+🔐 Security Observation: Token-Based Upload Mechanism
+Context
+
+During analysis of the JENSEN-GROUP AI recruitment terminal, the document upload mechanism was inspected.
+
+The upload flow is implemented via:
+
+A token-based URL:
+
+/terminal-upload/{token}
+
+A client-side upload handler that sends files directly to:
+
+https://stairecruit.blob.core.windows.net/applications/{token}/{filename}?{SAS}
+Using an Azure Blob Storage SAS token with write permissions.
+🔍 Observed Behavior
+
+From the client-side code:
+
+Uploads are performed using:
+
+fetch(url, {
+    method: 'PUT',
+    headers: {
+        'x-ms-blob-type': 'BlockBlob',
+        'Content-Type': f.type || 'application/octet-stream'
+    },
+    body: f
+});
+The SAS token:
+Grants write (w) and create (c) permissions
+Is valid for an extended time window
+Is embedded client-side
+
+The system states:
+
+“Files are write-only. Once uploaded, only our team can access them.”
+
+⚠️ Potential Risk
+1. Token Exposure
+
+If an application token is shared publicly (e.g., screenshots, social posts):
+
+The upload endpoint becomes accessible to anyone with:
+The token (JG1-XXXXXXX)
+The SAS query string
+
+👉 This effectively acts as a bearer credential for write access
+
+2. Lack of Identity Binding
+
+Uploads appear to be:
+
+Token-scoped, but not
+User-session bound
+
+Meaning:
+
+Possession of the token alone may be sufficient to:
+Upload additional files
+Potentially overwrite or add to another candidate’s submission
+3. Direct-to-Blob Upload
+
+Because uploads go directly to Azure Blob Storage:
+
+No server-side validation layer is visible
+No additional authentication step is enforced at upload time
+Trust is delegated entirely to:
+The SAS token
+The tokenized path
+🧠 Security Interpretation
+
+This is a classic example of:
+
+Client-side delegated storage access using SAS tokens
+
+While common in modern architectures, it introduces risks if:
+
+Tokens are long-lived
+Tokens are not tightly scoped
+Tokens are easily exposed
+🛡️ Recommendations
+1. Short-Lived SAS Tokens
+Reduce validity window (e.g., minutes instead of years)
+2. Scope Restriction
+Limit permissions to:
+create only (avoid overwrite if not needed)
+Restrict to specific blob names if possible
+3. Server-Side Mediation
+Route uploads via backend:
+Validate session
+Issue per-upload SAS dynamically
+4. Token Binding
+Associate upload token with:
+Candidate session
+IP / device fingerprint (optional)
+One-time usage
+5. Exposure Awareness
+
+Educate users:
+
+“Do not share your token publicly”
+
+🧪 Ethical Consideration
+
+While it is technically possible to reason about how token-based access could be reused:
+
+No actions were taken to:
+Access other users’ data
+Upload files under another identity
+
+This analysis is purely:
+
+Observational
+Architectural
+Security-focused
+🧩 Takeaway
+
+The system demonstrates a modern, scalable design:
+
+Direct-to-cloud uploads
+Tokenized access
+Minimal backend overhead
+
+However:
+
+Security depends entirely on correct token handling and lifecycle management
+
+
+
