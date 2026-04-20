@@ -372,5 +372,8 @@ However:
 
 Security depends entirely on correct token handling and lifecycle management
 
+Curiosity and system exploration are part of how I work, but exploiting unintended behavior is not the goal.
+
+The real value is in understanding how a system could be hardened and made reliable at scale.
 
 
